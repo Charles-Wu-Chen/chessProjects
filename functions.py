@@ -1,9 +1,9 @@
-from chess import engine, pgn
+from chess import engine, pgn, Board
 import chess
 import numpy as np
 import subprocess
 import re
-
+import os
 
 def configureEngine(engineName: str, uci_options: dict) -> engine:
     """
@@ -151,5 +151,97 @@ def getNumberOfGames(fen: str) -> int:
     db = '/home/julian/chess/database/gameDB/novelties'
     output = str(subprocess.run(['tkscid', script, db, fen], stdout=subprocess.PIPE).stdout)
     print(output)
-    games = re.findall('\d+', output)[0]
+    games = re.findall(r'\d+', output)[0]
     return int(games)
+
+def relativePathToAbsPath(relative_path : str) -> str:
+    absolute_path = os.path.dirname(os.path.abspath(__file__))
+    return absolute_path + relative_path
+
+
+def analysisCP(position: Board, sf: engine, timeLimit: int):
+    """
+    This function analyses a given position with Stockfish and returns the centipawn score.
+    position: Board:
+        The position to analyse
+    sf:engine
+        Stockfish as a configured chess engine
+    timeLimit:int
+        The time in seconds spent on the position
+    return -> str
+        The centipawn score
+    """
+    # TODO: fix this somehow
+    # sf = configureEngine('stockfish', {'Threads': '10', 'Hash': '8192'})
+    if position.is_game_over():
+        return None
+
+    info = sf.analyse(position, chess.engine.Limit(time=timeLimit))
+    # sf.quit()
+    return info
+
+
+def analysisWDL(position: Board, lc0: engine, limit: int, time: bool = False):
+    """
+    This function analyses a given chess position with LC0 to get the WDL from whtie's perspective.
+    position:Board
+        The position to analyse
+    lc0:engine
+        LC0 already as a chess engine
+    limit:int
+        The limit for the analysis, default is nodes, but time can also be selected
+    time:bool = False
+        If this is true, the limit will be for the time in seconds
+    return -> str
+        The formated WDL
+    """
+    # The analyse() method gives an error if the game is over (i.e. checkmate, stalemate or insuffucient material)
+    if position.is_game_over():
+        return None
+    
+    if time:
+        info = lc0.analyse(position, chess.engine.Limit(time=limit))
+    else:
+        info = lc0.analyse(position, chess.engine.Limit(nodes=limit))
+    return info
+
+
+
+
+def analysisCPnWDL(position: Board, lc0: engine, nodes: int, sf: engine) -> tuple:
+    """
+    This function analyses a position both with LC0 and Stockfish. It returns the WDL and CP infos as tuple.
+    """
+    if position.is_game_over():
+        return None
+
+    # Defining Stockfish here is not ideal, but it's the easiest way right now
+    # sf = configureEngine(r'K:\github\stockfish-windows-x86-64\stockfish\stockfish-windows-x86-64.exe', {'Threads': '10', 'Hash': '8192'})
+    iLC0 = lc0.analyse(position, chess.engine.Limit(nodes=nodes))
+    iSF = sf.analyse(position, chess.engine.Limit(time=4))
+
+    return (iLC0, iSF)
+
+
+def formatInfo(infoLC0 = None, infoSF = None) -> str:
+    """
+    This function takes the info from an engine analysis by LC0 or stockfish and returns the WDL/CP as string
+    """
+    evaluation = ""
+    if infoLC0:
+        wdl = []
+        wdl_w = engine.PovWdl.white(infoLC0['wdl'])
+        for w in wdl_w:
+            wdl.append(w)
+        evaluation = str(wdl)
+    if infoSF:
+        if infoLC0:
+            evaluation += ';'
+        cp = str(infoSF['score'].white())
+        if '#' in cp:
+            if '+' in cp:
+                cp = 10000
+            else:
+                cp = -10000
+        evaluation += str(cp)
+    return evaluation

@@ -2,6 +2,9 @@ import re
 import chess
 from functions import *
 
+"""
+ Moves with higher policy values are prioritized during the search
+ """
 
 def getPolicyHead(leela: engine, positions: list) -> list:
     """
@@ -18,9 +21,9 @@ def getPolicyHead(leela: engine, positions: list) -> list:
     for pos in positions:
         polDict = dict()
         board = chess.Board(pos)
-        info = leela.analysis(board, chess.engine.Limit(nodes=1))
+        info = leela.analysis(board, chess.engine.Limit(nodes=3))
         for i in info:
-            # print(i)
+            print(i)
             for j in i.values():
                 p = re.findall('P: *\d*\.\d\d%', str(j))
                 if (move := str(j).split()[0]) != 'node' and p:
@@ -81,5 +84,11 @@ if __name__ == '__main__':
                 'rnbqk2r/pp2nppp/4p3/2ppP3/3P2Q1/P1P5/2P2PPP/R1B1KBNR b KQkq - 2 7',
                 'rnb1k2r/1p1n1pp1/p3p2p/2bq4/3NN3/2P1Q1B1/6PP/3RKB1R w Kkq - 3 18']
     networks = ['/home/julian/Desktop/smallNet.gz', '/home/julian/Desktop/mediumNet.gz', '/home/julian/Desktop/largeNet', '/home/julian/chess/maiaNets/maia-1900.pb']
-    print(testNets(networks, openings))
+    # print(testNets(networks, openings))
+
+    op = {'WeightsFile': r'K:\leela\lc0-v0.30.0-windows-gpu-nvidia-cudnn\791556.pb.gz', 'UCI_ShowWDL': 'true', 'VerboseMoveStats': 'ture'}
+    # op = { 'UCI_ShowWDL': 'true'}
+    leela = configureEngine(r'K:\leela\lc0-v0.30.0-windows-gpu-nvidia-cudnn\lc0.exe', op)
+
+    print(getPolicyHead(leela=leela, positions=positions))
     # leela.quit()

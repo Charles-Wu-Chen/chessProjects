@@ -31,14 +31,14 @@ def insert(position: str, nodes: int = -1, w: int = None, d: int = None, l: int 
     Inserting data into the table.
     Default values of nodes and depth are -1, if there is only an evaluation by LC0 or SF and not by both.
     """
-    con = sqlite3.connect('../out/evaluation.db')
+    con = sqlite3.connect(functions.relativePathToAbsPath(r'\evaluation.db'))
     cursor = con.cursor()
     cursor.execute(f'INSERT INTO eval VALUES ("{position}", "{nodes}", "{w}", "{d}", "{l}", "{depth}", "{cp}", "{mate}", "{pv}")')
     con.commit()
 
 
 def update(position: str, nodes: int = -1, w: int = None, d: int = None, l: int = None, depth: int = -1, cp: float = None, mate: int = None, pv: str = None):
-    con = sqlite3.connect('../out/evaluation.db')
+    con = sqlite3.connect(functions.relativePathToAbsPath(r'\evaluation.db'))
     cur = con.cursor()
     # TODO: update for CP
     cur.execute(f'UPDATE eval SET nodes={nodes}, w={w}, d={d}, l={l} WHERE position="{position}"')
@@ -46,7 +46,7 @@ def update(position: str, nodes: int = -1, w: int = None, d: int = None, l: int 
 
 
 def getEval(position: str):
-    con = sqlite3.connect('../out/evaluation.db')
+    con = sqlite3.connect(functions.relativePathToAbsPath(r'\evaluation.db'))
     cur = con.cursor()
     if not contains(position):
         return None
@@ -55,7 +55,7 @@ def getEval(position: str):
 
 
 def contains(position: str) -> bool:
-    con = sqlite3.connect('../out/evaluation.db')
+    con = sqlite3.connect(functions.relativePathToAbsPath(r'\evaluation.db'))
     cur = con.cursor()
     if cur.execute(f'SELECT 1 FROM eval WHERE position="{position}"').fetchall():
         return True
@@ -99,7 +99,7 @@ def importFromLichessDB(lichessDB: str):
 
 if __name__ == '__main__':
     """
-    DBname = '../out/evaluation.db'
+    DBname = functions.relativePathToAbsPath(r'\evaluation.db')
     con = sqlite3.connect(DBname)
     cur = con.cursor()
     cur.execute("DROP TABLE IF EXISTS eval")

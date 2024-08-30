@@ -1,0 +1,7 @@
+pygame>=2.1.2
+matplotlib
+chess
+pandas
+zstandard
+cairosvg
+chardet

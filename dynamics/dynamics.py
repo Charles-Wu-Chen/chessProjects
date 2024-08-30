@@ -27,6 +27,7 @@ def depthChange(fen: str, engine: chess.engine, minDepth: int = 1, maxDepth: int
     for d in range(minDepth, maxDepth+1):
         info = engine.analyse(board, chess.engine.Limit(depth=d))
         evals.append(info["score"].relative)
+    # print("fen:{}, evals: {}, minDepth: {}, maxDepth: {}".format(fen, evals, minDepth, maxDepth))
     return evals
 
 
@@ -40,6 +41,7 @@ def isPuzzle(fen: str, engine: chess.engine) -> bool:
     evDeep = depthChange(fen, engine, minDepth=18, maxDepth=20)
     startScore = min([s.score(mate_score=mateScore) for s in evShallow])
     endScore = min([s.score(mate_score=mateScore) for s in evDeep])
+    # print("fen:{}, evShallow: {}, startscore: {}, endscore: {}".format(fen, evShallow, startScore, endScore))
     return functions.winP(endScore)-functions.winP(startScore) > 20
 
 
@@ -58,6 +60,8 @@ def findPuzzles(pgnPath: str, engine: chess.engine) -> list:
                 if isPuzzle(board.fen(), engine):
                     print(board.fen())
                     puzzles.append(board.fen())
+                else:
+                    print("not", board.fen() )
     return puzzles
 
 
@@ -89,7 +93,9 @@ def testLichessPuzzles(dbPath: str, limit: int = None) -> list:
         if not isPuzzle(fen, sf):
             failed.append(fen)
             print(fen)
-    print(len(failed)/len(list(df['FEN'])))
+        else:
+            print("yes")
+    print(len(failed)/limit)
     return failed
 
 
@@ -105,7 +111,7 @@ def plotEvalChange(fens: list, engine: chess.engine, minDepth: int = 1, maxDepth
 
     for i, fen in enumerate(fens):
         evals = depthChange(fen, engine, minDepth, maxDepth)
-        ax.plot(range(minDepth, maxDepth+1), [s.score(mate_score=mateScore) for s in evals], color=colors[i%len(colors)], label=labels[i%len(labels)])
+        ax.plot(range(minDepth, maxDepth+1), [s.score(mate_score=mateScore) for s in evals], color=colors[i%len(colors)], label=fen[:10])
 
     ax.set_xlim(minDepth, maxDepth)
     ax.set_ylim(0)
@@ -114,7 +120,7 @@ def plotEvalChange(fens: list, engine: chess.engine, minDepth: int = 1, maxDepth
     ax.set_ylabel('Evaluation')
     plt.subplots_adjust(bottom=0.1, top=0.95, left=0.1, right=0.95)
     plt.title('Evaluation at different Depths')
-    # ax.legend()
+    ax.legend()
 
     if filename:
         plt.savefig(filename, dpi=500)
@@ -122,19 +128,41 @@ def plotEvalChange(fens: list, engine: chess.engine, minDepth: int = 1, maxDepth
         plt.show()
 
 
+def testDepthChange(fen: str, engine: chess.engine, minDepth: int = 1, maxDepth: int = 20):
+    
+    evals = depthChange(fen, engine, minDepth, maxDepth)
+    print("fen:{}, evals: {}".format(fen, evals))
+
 
 if __name__ == '__main__':
-    sf = functions.configureEngine('stockfish', {'Threads': 1})
+    sf = functions.configureEngine(r'K:\github\stockfish-windows-x86-64\stockfish\stockfish-windows-x86-64.exe', {'Threads': 1})
     fens = ['r1bq1rk1/2ppbppp/p1n2n2/1p2p3/4P3/1B3N2/PPPP1PPP/RNBQR1K1 w - - 2 8',
             '8/3RBk2/p3p3/2p2q2/3b4/8/PP4rP/6QK w - - 0 34',
             'b7/5p1k/1b2qp2/1P3N2/3p2P1/7P/2QN4/5K2 b - - 3 33',
             'r2q1r2/p3bkp1/b4n1p/2pn4/3p4/1P3NPB/P1QBPP1P/R3R1K1 w - - 0 20']
-    puzzleDB = '~/chess/resources/lichess_db_puzzle-10000.csv'
+    
+    absolute_path = os.path.dirname(os.path.abspath(__file__))
+    puzzleDB = absolute_path + r"\..\resources\lichess\filtered_lichess_db_puzzle.csv"
+
     # print(findPuzzles('/Users/julian/Desktop/testPGN.pgn', sf))
-    # print(testLichessPuzzles(puzzleDB, 2000))
+    print(testLichessPuzzles(puzzleDB, 200))
     # print(findPuzzles('../resources/jk_200.pgn', sf))
     # plotEvalChange(['4r2k/pp4pp/7q/3Npr2/2Pn1p2/PP3P2/6PP/1Q1RR2K w - - 6 29', '2rqk2r/1p2ppb1/p2p1Bp1/3b3p/4P3/1B3P2/PPPQ2PP/2KR3R b k - 0 14', 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'], sf, filename='../out/evalDepth.png')
-    positional = ['2r3k1/1bn3qp/p1p1pr2/1pPpNp2/3P2p1/1P4P1/P2QPPBP/2RR2K1 w - - 0 1']
-    plotEvalChange(positional, sf, filename='../out/strategic.png')
+    # positional = ['2r3k1/1bn3qp/p1p1pr2/1pPpNp2/3P2p1/1P4P1/P2QPPBP/2RR2K1 w - - 0 1']
+    # plotEvalChange(positional, sf, filename='../out/strategic.png')
     # plotEvalChange(['8/7r/8/5kP1/8/8/5PK1/1R6 w - - 0 57'], sf, maxDepth=30, filename='../out/evalDepth2.png')
+    # plotEvalChange(positional, sf)
+    
+    # for fen in fens:
+    #     if isPuzzle(fen, sf):
+    #         print(fen)
+    # sf.quit()
+    # sf = functions.configureEngine(r'K:\github\stockfish-windows-x86-64\stockfish\stockfish-windows-x86-64.exe', {'Threads': 1})
+    # plotEvalChange(fens, sf)
+    # print(findPuzzles(r'K:\github\chessProjects\resources\pgn\lichess_study_2024-2nd-half_wu-alice-cook-geoff-l_by_wuchen1_2024.07.26.pgn', sf))
+    # print(findPuzzles(r'K:\github\chessProjects\resources\pgn\lichess_study_2024-2nd-half_kevin-zhang-audrey-guo_by_wuchen1_2024.07.26.pgn', sf))
+    # print(findPuzzles(r'K:\github\chessProjects\resources\pgn\1.pgn', sf))
+    # fen = 'r2q1r2/p3bkp1/b4n1p/2pn4/3p4/1P3NPB/P1QBPP1P/R3R1K1 w - - 0 20'
+    # testDepthChange(fen, sf, 1, 5)
+    # testDepthChange(fen, sf, 1, 20)
     sf.quit()

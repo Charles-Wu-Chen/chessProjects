@@ -12,7 +12,7 @@ import functions
 from functions import configureEngine, sharpnessLC0
 import logging
 import evalDB
-
+import re
 
 def analyseGames(pgnPath: str, outfile: str, sf: engine, lc0: engine, timeLimit: int, nodeLimit: int) -> None:
     """
@@ -80,6 +80,7 @@ def analyseGames(pgnPath: str, outfile: str, sf: engine, lc0: engine, timeLimit:
                         wdl = [ int(w) for w in ana.split(';')[0].replace('[', '').replace(']', '').strip().split(',') ]
                         evalDB.insert(posDB, nodes=nodeLimit, cp=cp, w=wdl[0], d=wdl[1], l=wdl[2], depth=iSF['depth'])
             print(newGame, file=open(outfile, 'a+'), end='\n\n')
+        print ("end of open path" + pgnPath)
 
 
 
@@ -216,10 +217,10 @@ def analysisCPnWDL(position: Board, lc0: engine, nodes: int) -> tuple:
         return None
 
     # Defining Stockfish here is not ideal, but it's the easiest way right now
-    sf = configureEngine('stockfish', {'Threads': '10', 'Hash': '8192'})
+    # sf = configureEngine(r'K:\github\stockfish-windows-x86-64\stockfish\stockfish-windows-x86-64.exe', {'Threads': '10', 'Hash': '8192'})
     iLC0 = lc0.analyse(position, chess.engine.Limit(nodes=nodes))
     iSF = sf.analyse(position, chess.engine.Limit(time=4))
-    sf.quit()
+
     return (iLC0, iSF)
 
 
@@ -291,8 +292,22 @@ def sharpnessChangePerPlayer(pgnPath: str, startSharp: float = 0.468) -> dict:
     return sharpPlayer
 
 
+def getWDLfromComment(comment: str) -> []:
+        # Regular expression to capture the three numbers inside square brackets
+    pattern = r'\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]'
+    
+    # Search for the pattern in the string
+    match = re.search(pattern, comment)
+    
+    if match:
+        # Extract the numbers and convert them to integers
+        num1, num2, num3 = map(int, match.groups())
+        return [num1, num2, num3]
+    else:
+        # Return an empty list if the pattern is not found
+        return []
 
-def findMistakes(pgnPath: str) -> list:
+def findMistakes(pgnPath: str, sf: engine) -> list:
     """
     This function takes a PGN with WDL evaluations and finds the mistakes in the game
     pgnPath: str
@@ -302,32 +317,34 @@ def findMistakes(pgnPath: str) -> list:
     """
     # The number by which the win percentage has to decrease for the move to count as a mistake
     # Note that the WDL adds up to 1000, so 100 is equivalent to 10%
-    mis = 150
+    mis = 200
     lastWDL = None
     positions = list()
-    sf = configureEngine('stockfish', {'Threads': '9', 'Hash': '8192'})
+    
     with open(pgnPath, 'r') as pgn:
         while (game := chess.pgn.read_game(pgn)):
             node = game
             while not node.is_end():
+                
                 if node.comment:
-                    lastWDL = [ int(w) for w in node.comment.replace('[', '').replace(']', '').strip().split(',') ]
+                    lastWDL = getWDLfromComment(node.comment)
                 else:
                     node = node.variations[0]
                     continue
+
                 board = node.board()
                 pos = board.fen()
                 node = node.variations[0]
                 if node.comment:
-                    currWDL = [ int(w) for w in node.comment.replace('[', '').replace(']', '').strip().split(',') ]
+                    currWDL = getWDLfromComment(node.comment)
                     if node.turn() == chess.WHITE:
                         diff = currWDL[0]+currWDL[1]*0.5-(lastWDL[0]+lastWDL[1]*0.5)
                     else:
                         diff = currWDL[2]+currWDL[1]*0.5-(lastWDL[2]+lastWDL[1]*0.5)
+                    print(f"diff  {diff} for move {node.move} with current wdl {currWDL}")
                     if diff > mis:
                         bestMove = sf.analyse(board, chess.engine.Limit(depth=20))['pv'][0]
                         positions.append((board.san(node.move), pos, board.san(bestMove)))
-    sf.quit()
     return positions
 
 
@@ -641,9 +658,10 @@ def maiaMoves(positions: list, maiaFolder: str) -> dict:
 
 
 if __name__ == '__main__':
-    op = {'WeightsFile': '/home/julian/Desktop/largeNet', 'UCI_ShowWDL': 'true'}
-    leela = configureEngine('lc0', op)
-    sf = configureEngine('stockfish', {'Threads': '10', 'Hash': '8192'})
+    op = {'WeightsFile': r'K:\leela\lc0-v0.30.0-windows-gpu-nvidia-cudnn\791556.pb.gz', 'UCI_ShowWDL': 'true'}
+    # op = { 'UCI_ShowWDL': 'true'}
+    leela = configureEngine(r'K:\leela\lc0-v0.30.0-windows-gpu-nvidia-cudnn\lc0.exe', op)
+    sf = configureEngine(r'K:\github\stockfish-windows-x86-64\stockfish\stockfish-windows-x86-64.exe', {'Threads': '10', 'Hash': '8192'})
     """
     info = leela.analyse(Board('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'), chess.engine.Limit(nodes=5000))
     wdl = []
@@ -654,8 +672,10 @@ if __name__ == '__main__':
     """
     candidates = '../resources/wijkMasters2024.pgn'
     outCan = '../out/wijk2024.pgn'
-    # makeComments(candidates, outCan, analysisCPnWDL, 5000, leela, True)
 
+    
+    makeComments(functions.relativePathToAbsPath(r'resources\pgn\2024arvostudy\lichess_study_2024-sunday-arvo_by_aliceinwonderland123_2024.01.28.pgn'), functions.relativePathToAbsPath(r'\out\pgn\kevin_zhang_vs_monda.pgn'), analysisCPnWDL, 5000, leela, True)
+    # print(findMistakes(functions.relativePathToAbsPath(r'\out\pgn\kevin_zhang_vs_monda.pgn'), sf))
     """
     tournaments = ['arjun_biel.pgn', 'carlsen_open.pgn']
     for t in tournaments:
@@ -666,10 +686,9 @@ if __name__ == '__main__':
     # analyseGames('../resources/grandSwiss2023.pgn', '../out/grandSwiss2023-out.pgn', sf, leela, 4, 5000)
     # analyseGames('../resources/norwayOpenR10.pgn', '../out/games/norwayChessOpen2024-out.pgn', sf, leela, 4, 5000)
     # analyseGames('../resources/norwayWomenR10.pgn', '../out/games/norwayChessWomen-out.pgn', sf, leela, 4, 5000)
-    analyseGames(f'../resources/norwaya21.pgn', f'../out/games/norwaya2021-out.pgn', sf, leela, 4, 5000)
+    # analyseGames(functions.relativePathToAbsPath(r'\resources\pgn\1.pgn'), functions.relativePathToAbsPath(r'\out\pgn\1.pgn'), sf, leela, 4, 5000)
     # analyseGames('../resources/grenkeOpen2024.pgn', '../out/games/grenkeOpen2024.pgn', sf, leela, 4, 5000)
-    sf.quit()
-    leela.quit()
+    
     """
     playerSharp = sharpnessChangePerPlayer(candidates, startSharp)
     for k,v in playerSharp.items():
@@ -737,10 +756,10 @@ if __name__ == '__main__':
     plotWDL(outf3)
     """
     # Testing for Maia mistake analysis
-    logging.basicConfig(level=logging.WARNING)
-    pgn = '../resources/jkGames50.pgn'
-    fen = 'rnbqkb1r/pp2pppp/3p1n2/2p5/4P3/2P2N2/PP1PBPPP/RNBQK2R b KQkq - 2 4'
-    maiaFolder = '/Users/julian/chess/maiaNets'
+    # logging.basicConfig(level=logging.WARNING)
+    # pgn = '../resources/jkGames50.pgn'
+    # fen = 'rnbqkb1r/pp2pppp/3p1n2/2p5/4P3/2P2N2/PP1PBPPP/RNBQK2R b KQkq - 2 4'
+    # maiaFolder = '/Users/julian/chess/maiaNets'
     # print(maiaMoves([fen], maiaFolder))
     """
     # print(findMistakes('../out/Ponomariov-Carlsen-2010-15000.pgn'))
@@ -755,3 +774,7 @@ if __name__ == '__main__':
         print(f'Best move: {m[2]}')
         print(maiaM[m[1]])
     """
+
+    # print(findMistakes(functions.relativePathToAbsPath(r'\resources\pgn\1.pgn'), sf))
+    sf.quit()
+    leela.quit()

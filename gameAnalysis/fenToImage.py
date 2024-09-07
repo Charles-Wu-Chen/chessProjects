@@ -87,7 +87,7 @@ def generate_images_from_csv(csv_file_path: str, output_image_path: str):
 #                      previous_move="e2e4", pgn="filename", id= "1")
 
 
-csv_file_path = functions.relativePathToAbsPath(r'\out\pgn\0827night\comment\20240829230023move_details.csv')
-output_image_path = functions.relativePathToAbsPath(r'\out\puzzle\0827night')
-os.makedirs(output_image_path , exist_ok=True)
-generate_images_from_csv(csv_file_path, output_image_path)
+# csv_file_path = functions.relativePathToAbsPath(r'\out\pgn\0831Kevin\comment\20240831145327move_details.csv')
+# output_image_path = functions.relativePathToAbsPath(r'\out\puzzle\0831Kevin')
+# os.makedirs(output_image_path , exist_ok=True)
+# generate_images_from_csv(csv_file_path, output_image_path)

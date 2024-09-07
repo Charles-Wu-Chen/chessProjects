@@ -17,7 +17,17 @@ from glob import glob
 import csv
 import shutil
 import traceback
+import fenToImage
 
+
+input_folder = r"\out\pgn\0906Jason"
+player_name = "me"
+# encoding = "GB2312"
+encoding = 'utf-8'
+# 
+# The number by which the win percentage has to decrease for the move to count as a mistake
+# Note that the WDL adds up to 1000, so 100 is equivalent to 10%
+mis = 200
 
 def makeComments(gamesFile: str, outfile: str, analysis, limit: int, engine: engine, cache: bool = False) -> list:
     """
@@ -39,7 +49,7 @@ def makeComments(gamesFile: str, outfile: str, analysis, limit: int, engine: eng
     """
     
     gameNR = 1
-    with open(gamesFile, 'r',encoding='utf-8') as pgn:
+    with open(gamesFile, 'r',encoding=encoding) as pgn:
         while (game := chess.pgn.read_game(pgn)):
             print(f'Starting with game {gameNR}...')
             gameNR += 1
@@ -109,16 +119,14 @@ def findMistakes(pgnPath: str, sf: engine, playerName: str = None) -> list:
     return: list
         A list with the positions where mistakes occured
     """
-    # The number by which the win percentage has to decrease for the move to count as a mistake
-    # Note that the WDL adds up to 1000, so 100 is equivalent to 10%
-    # mis = 200
-    mis = 150
+
+
     lastWDL = None
     positions = list()
     
     pgn_file_name = os.path.basename(pgnPath)
 
-    with open(pgnPath, 'r', encoding='utf-8') as pgn:
+    with open(pgnPath, 'r', encoding=encoding) as pgn:
         while (game := chess.pgn.read_game(pgn)):
             node = game
             white_player = game.headers.get("White", "Unknown")
@@ -153,7 +161,8 @@ def findMistakes(pgnPath: str, sf: engine, playerName: str = None) -> list:
                         if playerName:
                             normalized_player_name = normalize_name(playerName)
                             normalized_current_player = normalize_name(current_player)
-                            if normalized_player_name != normalized_current_player:
+                            if normalized_player_name not in normalized_current_player:
+                                previous_move = board.san(node.move)
                                 # print (f"normalized_player_name  {normalized_player_name} normalized_current_player {normalized_current_player} ")
                                 continue # only generate puzzle for the player if name provided.
                         bestMove = sf.analyse(board, chess.engine.Limit(depth=20))['pv'][0]
@@ -206,10 +215,11 @@ def process_pgn_folder(input_folder: str, sf : engine, player_name: str = None):
     timestamp_str = current_timestamp.strftime("%Y%m%d%H%M%S")
     running_number = 1  # Initialize running number
     # Define the output CSV file path within the input folder
-    output_csv_path = os.path.join(input_folder, timestamp_str+"move_details.csv")
+    filename = timestamp_str+"move_details.csv"
+    output_csv_path = os.path.join(input_folder, filename)
     with open(output_csv_path, mode='w', newline='') as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=[
-            "id",  "White Player", "Black Player", "Current Turn",
+            "ID",  "White Player", "Black Player", "Current Turn",
             "Previous Move", "Current Move", "Best Move", "PGN File", "FEN",
         ])
         writer.writeheader()
@@ -222,7 +232,7 @@ def process_pgn_folder(input_folder: str, sf : engine, player_name: str = None):
             with open(output_csv_path, mode='a', newline='') as csv_file:
                 writer = csv.DictWriter(csv_file, fieldnames=[
                 "id", "White Player", "Black Player", "Current Turn",
-                "Previous Move", "Current Move", "Best Move", "PGN File", "FEN"
+                "Previous Move", "Game Move", "Best Move", "PGN File", "FEN"
             ])
                 for result in results:
                     id = running_number
@@ -241,6 +251,7 @@ def process_pgn_folder(input_folder: str, sf : engine, player_name: str = None):
             # Print the detailed traceback information
             traceback.print_exc()
             continue
+    return filename
     
     
     
@@ -249,7 +260,7 @@ def split_pgn_file(pgn_file_path, output_directory):
     os.makedirs(output_directory, exist_ok=True)
     
     # Open the PGN file
-    with open(pgn_file_path, encoding='utf-8') as pgn_file:
+    with open(pgn_file_path, encoding=encoding) as pgn_file:
         game_count = 1
         while True:
             # Parse each game
@@ -263,6 +274,7 @@ def split_pgn_file(pgn_file_path, output_directory):
             
             # Create a unique filename
             filename = f"{game_count}_{white_player}_vs_{black_player}.pgn"
+            filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
             output_path = os.path.join(output_directory, filename)
             
             # Save the game to a new PGN file
@@ -275,16 +287,12 @@ def split_pgn_file(pgn_file_path, output_directory):
     print(f"Split PGN file into {game_count - 1} individual games.")
 
 
-
-
 if __name__ == '__main__':
 
-    input_folder = r"\out\pgn\0827night"
-    input_file = r"0827_Tue_Night__2024-08-27-19-59.pgn"
 
+    # input_file = r"KevinZhangXY_vs_citso_2024.08.30.pgn"
+    input_directory = functions.relativePathToAbsPath(input_folder)
 
-        #  step 1 split into individual file per game
-    pgn_file = functions.relativePathToAbsPath(input_folder + "\\" + input_file)
     output_directory = functions.relativePathToAbsPath(input_folder + "\\out" )
     split_directory = functions.relativePathToAbsPath(input_folder + "\\split" )
     comment_directory = functions.relativePathToAbsPath(input_folder + "\\comment" )
@@ -292,9 +300,11 @@ if __name__ == '__main__':
     os.makedirs(split_directory, exist_ok=True)
     os.makedirs(comment_directory, exist_ok=True)
 
-
-    # split_pgn_file(pgn_file, output_directory)
-    # shutil.move(pgn_file, split_directory)
+    #  step 1 split into individual file per game
+    raw_pgn_files = glob(os.path.join(input_directory, "*.pgn"))
+    for pgn_file in raw_pgn_files:
+        split_pgn_file(pgn_file, output_directory)
+        shutil.move(pgn_file, split_directory)
 
     # step 2 make comment with WDL and eva
     op = {'WeightsFile': r'K:\leela\lc0-v0.30.0-windows-gpu-nvidia-cudnn\791556.pb.gz', 'UCI_ShowWDL': 'true'}
@@ -307,24 +317,32 @@ if __name__ == '__main__':
     # print(findMistakes(functions.relativePathToAbsPath(r'\out\pgn\johansen-darryl-vsshen-zhiyuan.pgn'), sf))
 
     pgn_files = glob(os.path.join(output_directory, "*.pgn"))
-    print(f"pgn loaded {pgn_files}")
+    print(f"after split pgn loaded {pgn_files}")
 
 
     # Process each PGN file
     try:
-        # for pgn_file in pgn_files:
-        #     file_name = os.path.basename(pgn_file)
-        #     results = makeComments(pgn_file, comment_directory+"\\"+file_name, analysisCPnWDL, 5000, leela, True)
-        #     os.makedirs(split_directory+"\\done\\", exist_ok=True)
-        #     shutil.move(pgn_file, split_directory+"\\done\\"+file_name)
+        for pgn_file in pgn_files:
+            file_name = os.path.basename(pgn_file)
+            try: 
+                results = makeComments(pgn_file, comment_directory+"\\"+file_name, analysisCPnWDL, 5000, leela, True)
+                os.makedirs(split_directory+"\\done\\", exist_ok=True)
+                shutil.move(pgn_file, split_directory+"\\done\\"+file_name)
+            except Exception as exc:
+                print (traceback.format_exc())
+                print (exc)
         
-        # process_pgn_folder(comment_directory, sf)
-        process_pgn_folder(comment_directory, sf, "wuchen2")
+        detail_file_name = process_pgn_folder(comment_directory, sf, player_name)
     # print(findMistakes(functions.relativePathToAbsPath(r'\out\pgn\2024arvostudy\Kevin _vs_Ariyathilaka,Saheli _2024.08.09.pgn'), sf))
 
     finally:
         sf.quit()
         leela.quit()
+
+    csv_file_path = comment_directory+"\\"+detail_file_name
+    output_image_path = comment_directory+"\\img\\"
+    os.makedirs(output_image_path , exist_ok=True)
+    fenToImage.generate_images_from_csv(csv_file_path, output_image_path)
 
     
 

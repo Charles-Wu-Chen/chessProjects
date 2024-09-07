@@ -1,4 +1,4 @@
 resources/
 out/
- __pycache__/
- */__pycache__/
+__pycache__/
+gameAnalysis/__pycache__/

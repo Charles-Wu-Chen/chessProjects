@@ -6,7 +6,7 @@ import chess
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-with open(functions.relativePathToAbsPath(r'\out\pgn\0902oscar\out\1_yuyiqi_vs_Shivam,_Arora.pgn'), 'rb') as f:
+with open(functions.relativePathToAbsPath(r'\out\pgn\0907oscar20\俞亦奇-丁逸轩 0-1.pgn'), 'rb') as f:
     result = chardet.detect(f.read())
     print(result)
 

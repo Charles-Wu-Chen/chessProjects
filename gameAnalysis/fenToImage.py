@@ -7,7 +7,7 @@ import csv
 import functions
 
 def generate_chess_image(fen: str, output_file: str, white_player: str = "White", black_player: str = "Black", 
-                         previous_move: str = "", pgn: str = "", id: str = "") -> None:
+                         previous_move: str = "", id: str = "", sharpness: float = 0.0) -> None:
     """
     Generates a chess board image from a FEN string, adds additional information, and saves it to a file.
     
@@ -52,7 +52,7 @@ def generate_chess_image(fen: str, output_file: str, white_player: str = "White"
     draw.text((10, height + 40), f"Black: {black_player}", fill="black", font=font)
     draw.text((10, height + 55), f"Side to Move: {side_to_move}", fill="black", font=font)
     draw.text((10, height + 70), f"Previous Move: {previous_move}", fill="black", font=font)
-    draw.text((10, height + 85), f"PGN file: {pgn}", fill="black", font=font)
+    draw.text((10, height + 85), f"Sharpness: {sharpness}", fill="black", font=font)
     
 
     # Save the final image
@@ -70,14 +70,14 @@ def generate_images_from_csv(csv_file_path: str, output_image_path: str):
             white_player = row["White Player"]
             black_player = row["Black Player"]
             previous_move = row["Previous Move"]
-            pgn = row["PGN File"]
-            id = row ["id"]
+            id = row ["ID"]
+            sharpness = row ["Sharpness"]
             
             # Define output file name (you can customize this)
             output_file = output_image_path + "\\" + f"chess_image_{i+1}.png"
             
             # Generate the image
-            generate_chess_image(fen, output_file, white_player, black_player, previous_move, pgn, id)
+            generate_chess_image(fen, output_file, white_player, black_player, previous_move, id, sharpness)
 
 
 # Example usage:

@@ -20,16 +20,12 @@ import traceback
 import fenToImage
 
 
-input_folder = r"\out\pgn\0906Jason"
-player_name = "me"
+
 # encoding = "GB2312"
 encoding = 'utf-8'
-# 
-# The number by which the win percentage has to decrease for the move to count as a mistake
-# Note that the WDL adds up to 1000, so 100 is equivalent to 10%
-mis = 200
 
-def makeComments(gamesFile: str, outfile: str, analysis, limit: int, engine: engine, cache: bool = False) -> list:
+
+def makeComments(gamesFile: str, outfile: str, analysis, limit: int, engine: engine, sf: engine, cache: bool = False) -> list:
     """
     This function plays thorugh the games in a file and makes comments to them.
     The specific comments depend on the analysis method chosen
@@ -111,7 +107,7 @@ def normalize_name(name: str) -> str:
     return re.sub(r'\W+', '', name.lower())
 
 
-def findMistakes(pgnPath: str, sf: engine, playerName: str = None) -> list:
+def findMistakes(pgnPath: str, sf: engine, playerName: str = None, mistakeValue: int = 200) -> list:
     """
     This function takes a PGN with WDL evaluations and finds the mistakes in the game
     pgnPath: str
@@ -143,6 +139,7 @@ def findMistakes(pgnPath: str, sf: engine, playerName: str = None) -> list:
 
                 board = node.board()
                 pos = board.fen()
+                sharpness = functions.sharpnessLC0(lastWDL)
                 node = node.variations[0]
                 turn = "White" if board.turn else "Black"
                 if board.turn == chess.WHITE:
@@ -157,7 +154,7 @@ def findMistakes(pgnPath: str, sf: engine, playerName: str = None) -> list:
                         diff = currWDL[2]+currWDL[1]*0.5-(lastWDL[2]+lastWDL[1]*0.5)
 
                     # print(f"diff  {diff} for move {node.move} with current wdl {currWDL}")
-                    if diff > mis:
+                    if diff > mistakeValue:
                         if playerName:
                             normalized_player_name = normalize_name(playerName)
                             normalized_current_player = normalize_name(current_player)
@@ -173,10 +170,11 @@ def findMistakes(pgnPath: str, sf: engine, playerName: str = None) -> list:
                                 "Black Player": black_player,
                                 "Current Turn": turn,
                                 "Previous Move": previous_move,
-                                "Current Move": board.san(node.move),
+                                "Game Move": board.san(node.move),
                                 "Best Move": board.san(bestMove),
                                 "PGN File": pgn_file_name,
-                                "FEN": pos
+                                "FEN": pos,
+                                "Sharpness": sharpness
                             }
                         )
                 previous_move = board.san(node.move)
@@ -199,7 +197,7 @@ def getWDLfromComment(comment: str) -> []:
         return []
     
 
-def process_pgn_folder(input_folder: str, sf : engine, player_name: str = None):
+def process_pgn_folder(input_folder: str, sf : engine, player_name: str = None, mistakeValue: int = 200):
     # Ensure the input folder exists
     if not os.path.isdir(input_folder):
         raise ValueError(f"The input folder '{input_folder}' does not exist.")
@@ -209,10 +207,7 @@ def process_pgn_folder(input_folder: str, sf : engine, player_name: str = None):
     pgn_files = glob(os.path.join(input_folder, "*.pgn"))
 
     # Get the current date and time
-    current_timestamp = datetime.now()
-
-    # Format it as a string
-    timestamp_str = current_timestamp.strftime("%Y%m%d%H%M%S")
+    timestamp_str = current_time_str("%Y%m%d%H%M%S")
     running_number = 1  # Initialize running number
     # Define the output CSV file path within the input folder
     filename = timestamp_str+"move_details.csv"
@@ -220,19 +215,19 @@ def process_pgn_folder(input_folder: str, sf : engine, player_name: str = None):
     with open(output_csv_path, mode='w', newline='') as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=[
             "ID",  "White Player", "Black Player", "Current Turn",
-            "Previous Move", "Current Move", "Best Move", "PGN File", "FEN",
+            "Previous Move", "Game Move", "Best Move","PGN File", "FEN", "Sharpness"
         ])
         writer.writeheader()
     
     # Process each PGN file
     for pgn_file in pgn_files:
         try:
-            results = findMistakes(pgn_file, sf, player_name)
+            results = findMistakes(pgn_file, sf, player_name, mistakeValue)
             
             with open(output_csv_path, mode='a', newline='') as csv_file:
                 writer = csv.DictWriter(csv_file, fieldnames=[
                 "id", "White Player", "Black Player", "Current Turn",
-                "Previous Move", "Game Move", "Best Move", "PGN File", "FEN"
+                "Previous Move", "Game Move", "Best Move", "PGN File", "FEN", "Sharpness"
             ])
                 for result in results:
                     id = running_number
@@ -252,6 +247,13 @@ def process_pgn_folder(input_folder: str, sf : engine, player_name: str = None):
             traceback.print_exc()
             continue
     return filename
+
+def current_time_str(format : str):
+    current_timestamp = datetime.now()
+
+    # Format it as a string
+    timestamp_str = current_timestamp.strftime(format)
+    return timestamp_str
     
     
     
@@ -272,9 +274,11 @@ def split_pgn_file(pgn_file_path, output_directory):
             white_player = game.headers.get("White", "Unknown").replace(" ", "_")
             black_player = game.headers.get("Black", "Unknown").replace(" ", "_")
             
+            timestamp_str = current_time_str("%d%H%M%S%f")
+
             # Create a unique filename
-            filename = f"{game_count}_{white_player}_vs_{black_player}.pgn"
-            filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+            filename = f"{game_count}_{white_player}_vs_{black_player}_{timestamp_str}.pgn"
+            filename = re.sub(r'[,<>:"/\\|?*]', '_', filename)
             output_path = os.path.join(output_directory, filename)
             
             # Save the game to a new PGN file
@@ -289,6 +293,9 @@ def split_pgn_file(pgn_file_path, output_directory):
 
 if __name__ == '__main__':
 
+    input_folder = r"\out\pgn\0923Alice"
+    player_name = "ali"
+    mistakeValue = 200
 
     # input_file = r"KevinZhangXY_vs_citso_2024.08.30.pgn"
     input_directory = functions.relativePathToAbsPath(input_folder)
@@ -325,14 +332,14 @@ if __name__ == '__main__':
         for pgn_file in pgn_files:
             file_name = os.path.basename(pgn_file)
             try: 
-                results = makeComments(pgn_file, comment_directory+"\\"+file_name, analysisCPnWDL, 5000, leela, True)
+                results = makeComments(pgn_file, comment_directory+"\\"+file_name, analysisCPnWDL, 5000, leela, sf, True)
                 os.makedirs(split_directory+"\\done\\", exist_ok=True)
                 shutil.move(pgn_file, split_directory+"\\done\\"+file_name)
             except Exception as exc:
                 print (traceback.format_exc())
                 print (exc)
         
-        detail_file_name = process_pgn_folder(comment_directory, sf, player_name)
+        detail_file_name = process_pgn_folder(comment_directory, sf, player_name, mistakeValue)
     # print(findMistakes(functions.relativePathToAbsPath(r'\out\pgn\2024arvostudy\Kevin _vs_Ariyathilaka,Saheli _2024.08.09.pgn'), sf))
 
     finally:

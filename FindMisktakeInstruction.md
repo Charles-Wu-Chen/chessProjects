@@ -11,7 +11,6 @@
 - **Black:** 黑方棋手的名字。
 - **Side to Move:** 表示当前局面轮到哪方走棋。
 - **Previous Move:** 当前局面之前的一步棋。
-- **PGN file:** 对应棋局的PGN文件名称。
 
 ## 2. Excel文件
 
@@ -24,5 +23,4 @@ Excel文件提供了更详细的棋局信息，包含以下字段：
 - **Previous Move:** 当前局面之前的最后一步棋。
 - **Game Move:** 棋局中的实际走法，通常为错误走法。
 - **Best Move:** 引擎推荐的最佳走法，比实际走法更优。
-- **PGN File:** 对应棋局的PGN文件名称。
 - **FEN:** 当前局面的FEN字符串，可以直接复制并粘贴到Lichess或Chess.com等平台查看局面。

@@ -21,8 +21,11 @@ def generate_chess_image(fen: str, output_file: str, white_player: str = "White"
     # Create a chess board from the FEN string
     board = chess.Board(fen)
 
+    # Determine if the board should be flipped
+    flip = not board.turn  # Flip when it's Black's turn
+
     # Generate an SVG of the board
-    svg_image = chess.svg.board(board)
+    svg_image = chess.svg.board(board, flipped=flip)
 
     # Convert SVG to PNG using CairoSVG
     png_image = cairosvg.svg2png(bytestring=svg_image)
@@ -36,24 +39,30 @@ def generate_chess_image(fen: str, output_file: str, white_player: str = "White"
     new_image = Image.new("RGB", (width, new_height), "white")
     new_image.paste(image, (0, 0))
 
+    # Resize the image to 50% of its original size
+    new_width = int(width * 0.5)
+    new_height = int(new_height * 0.5)
+    new_image = new_image.resize((new_width, new_height), Image.LANCZOS)
+
     # Draw the additional text
     draw = ImageDraw.Draw(new_image)
 
     # Load a font
     try:
-        font = ImageFont.truetype("arial.ttf", 12)  # Path to a TTF font file
+        font = ImageFont.truetype("arial.ttf", 8)  # Font size 8
     except IOError:
         font = ImageFont.load_default()
 
     # Text content, each info on a new line with adjusted height
     side_to_move = "White" if board.turn else "Black"
-    draw.text((10, height + 10), f"ID: {id}", fill="black", font=font)
-    draw.text((10, height + 25), f"White: {white_player}", fill="black", font=font)
-    draw.text((10, height + 40), f"Black: {black_player}", fill="black", font=font)
-    draw.text((10, height + 55), f"Side to Move: {side_to_move}", fill="black", font=font)
-    draw.text((10, height + 70), f"Previous Move: {previous_move}", fill="black", font=font)
-    draw.text((10, height + 85), f"Sharpness: {sharpness}", fill="black", font=font)
-    
+    line_height = 9  # Slightly reduced line height
+    start_y = int(height * 0.5) + 2
+
+    draw.text((5, start_y), f"ID: {id}", fill="black", font=font)
+    draw.text((5, start_y + line_height), f"{white_player} (W) vs {black_player} (B)", fill="black", font=font)
+    draw.text((5, start_y + 2*line_height), f"Side to Move: {side_to_move}", fill="black", font=font)
+    draw.text((5, start_y + 3*line_height), f"Previous Move: {previous_move}", fill="black", font=font)
+    draw.text((5, start_y + 4*line_height), f"Sharpness: {sharpness}", fill="black", font=font)
 
     # Save the final image
     new_image.save(output_file)

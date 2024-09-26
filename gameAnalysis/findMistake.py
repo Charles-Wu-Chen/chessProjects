@@ -293,8 +293,8 @@ def split_pgn_file(pgn_file_path, output_directory):
 
 if __name__ == '__main__':
 
-    input_folder = r"\out\pgn\0923Alice"
-    player_name = "ali"
+    input_folder = r"\out\pgn\0924TueNight"
+    player_name = None
     mistakeValue = 200
 
     # input_file = r"KevinZhangXY_vs_citso_2024.08.30.pgn"

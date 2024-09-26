@@ -8,11 +8,13 @@ import matplotlib.ticker as mtick
 import numpy as np
 import pandas as pd
 import glob
-import os, sys
+import os
+import sys
 import scipy.stats as stats
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import functions
+from findMistake import split_pgn_file  # Import the split_pgn_file function
 
 
 def getPlayers(pgnPath: str, whiteList: list = None) -> list:
@@ -26,22 +28,14 @@ def getPlayers(pgnPath: str, whiteList: list = None) -> list:
     return -> list
         A list of the players' names
     """
-    players = list()
+    players = set()
     with open(pgnPath, 'r') as pgn:
         while (game := chess.pgn.read_game(pgn)):
-            if (w := game.headers["White"]) not in players:
-                if not whiteList:
-                    players.append(w)
-                else:
-                    if w in whiteList:
-                        players.append(w)
-            if (b := game.headers["Black"]) not in players:
-                if not whiteList:
-                    players.append(b)
-                else:
-                    if b in whiteList:
-                        players.append(b)
-    return players
+            for color in ["White", "Black"]:
+                player = game.headers[color]
+                if not whiteList or player in whiteList:
+                    players.add(player)
+    return list(players)
 
 
 def getMoveData(pgnPaths: list) -> pd.DataFrame:
@@ -50,12 +44,11 @@ def getMoveData(pgnPaths: list) -> pd.DataFrame:
     return -> pandas.DataFrame
         A dataframe containing various fields where each contains a list with the data after each move
     """
-    data = {'player': list(), 'rating': list(), 'acc': list(), 'sharp': list()}
+    data = {'player': [], 'rating': [], 'acc': [], 'sharp': []}
     for pgnPath in pgnPaths:
         with open(pgnPath, 'r') as pgn:
             while game := chess.pgn.read_game(pgn):
-                if 'WhiteElo' in game.headers.keys() and 'BlackElo' in game.headers.keys():
-                    # TODO: add option to ignore the ratings
+                if 'WhiteElo' in game.headers and 'BlackElo' in game.headers:
                     wRating = int(game.headers['WhiteElo'])
                     bRating = int(game.headers['BlackElo'])
                 else:
@@ -93,38 +86,29 @@ def getMoveData(pgnPaths: list) -> pd.DataFrame:
                     data['sharp'].append(sharp)
 
                     cpB = cpA
-    df = pd.DataFrame(data)
-    return df
+    return pd.DataFrame(data)
 
 
 def plotAccuracyDistribution(df: pd.DataFrame) -> None:
     """
     This plots the accuracy distribution for all moves in the given PGNs
     """
-    fig, ax = plt.subplots(figsize=(10,6))
+    fig, ax = plt.subplots(figsize=(10, 6))
 
     ratingBounds = (2600, 2700, 2850)
     colors = ['#689bf2', '#f8a978', '#ff87ca', '#beadfa', '#A1EEBD']
-    for i in range(len(ratingBounds)-1):
-        x1 = list(df[df['rating'].isin(range(ratingBounds[i], ratingBounds[i+1]))]['acc'])
+    for i in range(len(ratingBounds) - 1):
+        x1 = list(df[df['rating'].isin(range(ratingBounds[i], ratingBounds[i + 1]))]['acc'])
         nMoves = len(x1)
         acc = [0] * 101
-        for x in list(x1):
+        for x in x1:
             acc[x] += 1
-        acc = [x/nMoves for x in acc]
-        ax.bar([x-0.5 for x in range(101)], acc, width=1, color=colors[i%len(ratingBounds)], edgecolor='black', linewidth=0.5, alpha=0.5, label=f'{ratingBounds[i]}-{ratingBounds[i+1]}')
-    """
-    nMoves = len(list(df['acc']))
-    acc = [0] * 101
-    for x in list(df['acc']):
-        acc[x] += 1
-    acc = [x/nMoves for x in acc]
+        acc = [x / nMoves for x in acc]
+        ax.bar([x - 0.5 for x in range(101)], acc, width=1, color=colors[i % len(ratingBounds)], edgecolor='black', linewidth=0.5, alpha=0.5, label=f'{ratingBounds[i]}-{ratingBounds[i + 1]}')
 
-    ax.bar(list(range(101)), acc, width=1, color='#689bf2', edgecolor='black', linewidth=0.5)
-    """
     ax.set_facecolor('#e6f7f2')
     ax.set_yscale('log')
-    plt.xlim(0,100)
+    plt.xlim(0, 100)
     ax.invert_xaxis()
     ax.set_xlabel('Move Accuracy')
     ax.set_ylabel('Relative number of moves')
@@ -138,7 +122,7 @@ def plotAccuracyDistribution(df: pd.DataFrame) -> None:
     plt.show()
 
 
-def generateAccDistributionGraphs(pgnPath: str, players: list):
+def generateAccuracyDistributionGraphs(pgnPath: str, players: list):
     """
     This function generates the accuracy distribution graphs for the players in the tournament
     pgnPath: str
@@ -152,20 +136,20 @@ def generateAccDistributionGraphs(pgnPath: str, players: list):
 
 def getPlayerScores(pgnPath: str) -> dict:
     """
-    This function gets the scores for all players in a tournamet
+    This function gets the scores for all players in a tournament
     pgnPath: str
         The path to the PGN file of the tournament
     return -> dict
         A dictionary indexed by the player containing the number of games, points, games with white, points with white, games with black, points with black
     """
-    scores = dict()
+    scores = {}
     with open(pgnPath, 'r') as pgn:
         while (game := chess.pgn.read_game(pgn)):
             w = game.headers["White"]
             b = game.headers["Black"]
-            if w not in scores.keys():
+            if w not in scores:
                 scores[w] = [0, 0, 0, 0, 0, 0]
-            if b not in scores.keys():
+            if b not in scores:
                 scores[b] = [0, 0, 0, 0, 0, 0]
             scores[w][0] += 1
             scores[w][2] += 1
@@ -192,20 +176,20 @@ def getMoveSituation(pgnPath: str) -> dict:
     This function returns a dictionary index by the players and containing the number of moves where they were:
         much better (1+), slightly better (1-0.5), equal, slightly worse and much worse
     """
-    moves = dict()
+    moves = {}
     with open(pgnPath, 'r') as pgn:
         while (game := chess.pgn.read_game(pgn)):
             w = game.headers["White"]
             b = game.headers["Black"]
-            if w not in moves.keys():
+            if w not in moves:
                 moves[w] = [0, 0, 0, 0, 0, 0]
-            if b not in moves.keys():
+            if b not in moves:
                 moves[b] = [0, 0, 0, 0, 0, 0]
             node = game
 
             while not node.is_end():
                 node = node.variations[0]
-                if node.comment != 'None' and node.comment:
+                if node.comment:
                     cp = int(float(node.comment.split(';')[-1]))
                     if not node.turn():
                         moves[w][0] += 1
@@ -238,15 +222,15 @@ def worseGames(pgnPath: str) -> dict:
     """
     This function counts the number of games where a player was worse and the number of lost games.
     """
-    games = dict()
+    games = {}
     with open(pgnPath, 'r') as pgn:
         while (game := chess.pgn.read_game(pgn)):
             w = game.headers["White"]
             b = game.headers["Black"]
             r = game.headers["Result"]
-            if w not in games.keys():
+            if w not in games:
                 games[w] = [0, 0]
-            if b not in games.keys():
+            if b not in games:
                 games[b] = [0, 0]
             if r == '1-0':
                 games[b][1] += 1
@@ -270,15 +254,15 @@ def worseGames(pgnPath: str) -> dict:
 
 
 def betterGames(pgnPath: str) -> dict:
-    games = dict()
+    games = {}
     with open(pgnPath, 'r') as pgn:
         while (game := chess.pgn.read_game(pgn)):
             w = game.headers["White"]
             b = game.headers["Black"]
             r = game.headers["Result"]
-            if w not in games.keys():
+            if w not in games:
                 games[w] = [0, 0]
-            if b not in games.keys():
+            if b not in games:
                 games[b] = [0, 0]
             if r == '1-0':
                 games[w][1] += 1
@@ -306,7 +290,7 @@ def sortPlayers(d: dict, index: int) -> list:
     This function takes a dictionary with a list as values and sorts the keys by the value at the index of the list
     """
 
-    players = list()
+    players = []
     for i in range(len(d.keys())):
         maximum = -1
         for k, v in d.items():
@@ -320,16 +304,16 @@ def sortPlayers(d: dict, index: int) -> list:
 
 
 def getInaccMistakesBlunders(pgnPath: str) -> dict:
-    games = dict()
+    games = {}
     # win percentage drop for inaccuracy, mistake and blunder
     bounds = (10, 15, 20)
     with open(pgnPath, 'r') as pgn:
         while (game := chess.pgn.read_game(pgn)):
             w = game.headers["White"]
             b = game.headers["Black"]
-            if w not in games.keys():
+            if w not in games:
                 games[w] = [0] * 3
-            if b not in games.keys():
+            if b not in games:
                 games[b] = [0] * 3
 
             node = game
@@ -590,7 +574,7 @@ def plotMultAccDistributions(pgnPaths: list, filename: str = None):
 
 def generateTournamentPlots(pgnPath: str, nicknames: dict = None, filename: str = None) -> None:
     players = getPlayers(pgnPath)
-    generateAccDistributionGraphs(pgnPath, players)
+    generateAccuracyDistributionGraphs(pgnPath, players)
     scores = getPlayerScores(pgnPath)
     moveSit = getMoveSituation(pgnPath)
     worse = worseGames(pgnPath)
@@ -617,18 +601,25 @@ def generateTournamentPlots(pgnPath: str, nicknames: dict = None, filename: str 
 
 
 if __name__ == '__main__':
-    t = '../out/candidates2024-WDL+CP.pgn'
-    nwc = '../out/games/norwayChessClassical.pgn'
-    nwcW = '../out/games/norwayChessWomenClassical.pgn'
+    # t = '../out/candidates2024-WDL+CP.pgn'
+    oo = 'out/tournament/2024-fide-chess-olympiad/raw/open.pgn'
+    ow = 'out/games/2024-fide-womens-chess-olympiad.pgn'
     nicknames = {'Nepomniachtchi': 'Nepo', 'Praggnanandhaa R': 'Pragg'}
     nicknames2 = {'Lei': 'Lei Tingjie', 'Ju': 'Ju Wenjun'}
-    players = getPlayers(t)
-    games = glob.glob('../out/games/*')
+    # players = getPlayers(oo)
+    # games = glob.glob('../out/games/*')
 
-    # generateTournamentPlots(nwc, nicknames, '../out/NorwayChessOpen')
-    generateTournamentPlots(nwcW, nicknames2, '../out/NorwayChessWomen')
-    
-    IMB = getInaccMistakesBlunders(nwc)
+    # Split the PGN file into individual games
+    split_output_folder = 'out/tournament/2024-fide-chess-olympiad/split/'
+    split_pgn_file(oo, split_output_folder)
+
+    # Process the split PGN files
+    split_pgn_files = glob.glob(os.path.join(split_output_folder, "*.pgn"))
+    for split_pgn in split_pgn_files:
+        generateTournamentPlots(split_pgn, nicknames2, f'../out/olympiadOpen_{os.path.basename(split_pgn).split(".")[0]}')
+
+    # generateTournamentPlots(ow, nicknames2, '../out/olympiadWomen')
+    # IMB = getInaccMistakesBlunders(nwc)
     # plotBarChart(IMB, ['Inaccuracies', 'Mistakes', 'Blunders'], 'Number of inaccuracies, mistakes and blunders', 'Number of moves', nicknames, '../out/NorwayChessOpenIMB.png', sortIndex=0)
 
     # df = getMoveData(games)
@@ -644,20 +635,20 @@ if __name__ == '__main__':
     # plotWorseGames(worse, nicknames)
     # plotWorseGames(betterGames(t), nicknames)
 
-    scores = {'Carlsen': [9, 6, 1.5, 1], 
-              'Nakamura': [7, 7, 1, 0.5],
-              'Pragg': [9, 4, 1.5, 0],
-              'Firouzja': [7, 4, 1.5, 1],
-              'Caruana': [6, 4, 0.5, 1],
-              'Ding': [4, 2, 0.5, 0.5]}
-    # plotScoresArmageddon(scores, '../out/NorwayChessOpenArmScores.png')
-    scoresW = {'Ju Wenjun': [9, 7, 1.5, 1.5],
-               'Muzychuk': [7, 7, 1, 1],
-               'Lei Tingjie': [9, 4, 0.5, 1],
-               'Vaishali': [6, 5, 1, 0.5],
-               'Humpy Koneru': [6, 3, 0.5, 0.5],
-               'Cramling': [4, 3, 0, 1]}
-    plotScoresArmageddon(scoresW, '../out/NorwayChessWomenArmScores.png')
+    # scores = {'Carlsen': [9, 6, 1.5, 1], 
+    #           'Nakamura': [7, 7, 1, 0.5],
+    #           'Pragg': [9, 4, 1.5, 0],
+    #           'Firouzja': [7, 4, 1.5, 1],
+    #           'Caruana': [6, 4, 0.5, 1],
+    #           'Ding': [4, 2, 0.5, 0.5]}
+    # # plotScoresArmageddon(scores, '../out/NorwayChessOpenArmScores.png')
+    # scoresW = {'Ju Wenjun': [9, 7, 1.5, 1.5],
+    #            'Muzychuk': [7, 7, 1, 1],
+    #            'Lei Tingjie': [9, 4, 0.5, 1],
+    #            'Vaishali': [6, 5, 1, 0.5],
+    #            'Humpy Koneru': [6, 3, 0.5, 0.5],
+    #            'Cramling': [4, 3, 0, 1]}
+    # plotScoresArmageddon(scoresW, '../out/NorwayChessWomenArmScores.png')
 
     """
     arjunC = '../out/arjun_closed.pgn'

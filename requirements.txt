@@ -5,3 +5,4 @@ pandas
 zstandard
 cairosvg
 chardet
+scipy

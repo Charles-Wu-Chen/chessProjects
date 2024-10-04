@@ -7,7 +7,7 @@ import csv
 import functions
 
 def generate_chess_image(fen: str, output_file: str, white_player: str = "White", black_player: str = "Black", 
-                         previous_move: str = "", id: str = "", sharpness: float = 0.0) -> None:
+                         previous_move: str = "", id: str = "", sharpness: float = 0.0, wdl: str = "") -> None:
     """
     Generates a chess board image from a FEN string, adds additional information, and saves it to a file.
     
@@ -63,6 +63,10 @@ def generate_chess_image(fen: str, output_file: str, white_player: str = "White"
     draw.text((5, start_y + 2*line_height), f"Side to Move: {side_to_move}", fill="black", font=font)
     draw.text((5, start_y + 3*line_height), f"Previous Move: {previous_move}", fill="black", font=font)
     draw.text((5, start_y + 4*line_height), f"Sharpness: {sharpness}", fill="black", font=font)
+        # Add WDL to the right side of the same line
+    wdl_text = f"WDL: {wdl}"
+    wdl_width = draw.textlength(wdl_text, font=font)
+    draw.text((new_width - wdl_width - 5, start_y + 4*line_height), wdl_text, fill="black", font=font)
 
     # Save the final image
     new_image.save(output_file)
@@ -81,12 +85,13 @@ def generate_images_from_csv(csv_file_path: str, output_image_path: str):
             previous_move = row["Previous Move"]
             id = row ["ID"]
             sharpness = row ["Sharpness"]
+            wdl = row ["WDL"]
             
             # Define output file name (you can customize this)
             output_file = output_image_path + "\\" + f"chess_image_{i+1}.png"
             
             # Generate the image
-            generate_chess_image(fen, output_file, white_player, black_player, previous_move, id, sharpness)
+            generate_chess_image(fen, output_file, white_player, black_player, previous_move, id, sharpness, wdl)
 
 
 # Example usage:

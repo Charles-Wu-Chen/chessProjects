@@ -10,11 +10,16 @@ import pandas as pd
 import glob
 import os
 import sys
-import scipy.stats as stats
+
+import statistics
+from scipy import stats
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import functions
 from findMistake import split_pgn_file  # Import the split_pgn_file function
+
+# Define the list of players at the top level
+FOCUS_PLAYERS = ['Shen, Zhiyuan', 'Zhang, Jilin', 'Vincent, Alaina', 'Ryjanova, Julia', 'Nguyen, Thu Giang']
 
 
 def getPlayers(pgnPath: str, whiteList: list = None) -> list:
@@ -516,7 +521,7 @@ def plotBarChart(data: dict, labels: list, title: str, yLabel: str, short: dict 
     offset = width * (1 / 2 - nBars/2)
 
     for j in range(nBars):
-        ax.bar([i+1+offset+(width*j) for i in range(len(sort))], [data[p][j] for p in sort], color=colors[j%len(colors)], edgecolor='black', linewidth=0.5, width=width, label=labels[j])
+        ax.bar([i+1+offset+(width*j) for i in range(len(sort))], [data[p][j] for p in sort], color=colors[j], edgecolor='black', linewidth=0.5, width=width, label=labels[j])
 
     ax.legend()
     plt.title(title)
@@ -599,70 +604,347 @@ def generateTournamentPlots(pgnPath: str, nicknames: dict = None, filename: str 
         plotBarChart(IMB, ['Inaccuracies', 'Mistakes', 'Blunders'], 'Number of inaccuracies, mistakes and blunders', 'Number of moves', nicknames, sortIndex=0)
 
 
+def get_players_from_file(pgn_path):
+    """
+    Extract player names from a single PGN file.
+    """
+    players = set()
+    with open(pgn_path, 'r') as pgn:
+        game = chess.pgn.read_game(pgn)
+        if game:
+            players.add(game.headers["White"])
+            players.add(game.headers["Black"])
+    return players
+
+
+def get_all_players(folder_path, focus_players=None):
+    """
+    Get all unique player names from PGN files in the specified folder.
+    Filter based on focus_players if provided.
+    """
+    all_players = set()
+    pgn_files = glob.glob(os.path.join(folder_path, "*.pgn"))
+    
+    for pgn_file in pgn_files:
+        players = get_players_from_file(pgn_file)
+        all_players.update(players)
+    
+    return sorted(list(all_players))
+
+
+def get_player_scores(folder_path, focus_players=None):
+    """
+    Calculate scores for all players across all games in the folder.
+    Filter based on focus_players if provided.
+    """
+    scores = {}
+    pgn_files = glob.glob(os.path.join(folder_path, "*.pgn"))
+    
+    for pgn_file in pgn_files:
+        with open(pgn_file, 'r') as pgn:
+            game = chess.pgn.read_game(pgn)
+            if game:
+                white = game.headers["White"]
+                black = game.headers["Black"]
+                if focus_players and white not in focus_players and black not in focus_players:
+                    continue
+                result = game.headers["Result"]
+                
+                for player in [white, black]:
+                    if focus_players and player not in focus_players:
+                        continue
+                    if player not in scores:
+                        scores[player] = [0, 0]  # [games played, points]
+                    scores[player][0] += 1
+                    if result == "1-0" and player == white:
+                        scores[player][1] += 1
+                    elif result == "0-1" and player == black:
+                        scores[player][1] += 1
+                    elif result == "1/2-1/2":
+                        scores[player][1] += 0.5
+    
+    return scores
+
+
+def get_move_situation(folder_path, focus_players=None):
+    """
+    Analyze the positional advantage of players throughout their games.
+    Filter based on focus_players if provided.
+    """
+    moves = {}
+    pgn_files = glob.glob(os.path.join(folder_path, "*.pgn"))
+    
+    for pgn_file in pgn_files:
+        with open(pgn_file, 'r') as pgn:
+            game = chess.pgn.read_game(pgn)
+            if game:
+                white = game.headers["White"]
+                black = game.headers["Black"]
+                
+                # Only process the game if at least one player is in focus_players
+                if focus_players and white not in focus_players and black not in focus_players:
+                    continue
+                
+                for player in [white, black]:
+                    if focus_players and player not in focus_players:
+                        continue
+                    if player not in moves:
+                        moves[player] = [0, 0, 0, 0, 0, 0]  # [total, much better, slightly better, equal, slightly worse, much worse]
+                
+                node = game
+                while not node.is_end():
+                    node = node.variations[0]
+                    if node.comment:
+                        cp = int(float(node.comment.split(';')[-1]))
+                        current_player = white if not node.turn() else black
+                        if focus_players and current_player not in focus_players:
+                            continue
+                        moves[current_player][0] += 1
+                        if cp > 100:
+                            moves[current_player][1 if current_player == white else 5] += 1
+                        elif cp >= 50:
+                            moves[current_player][2 if current_player == white else 4] += 1
+                        elif cp >= -50:
+                            moves[current_player][3] += 1
+                        elif cp > -100:
+                            moves[current_player][4 if current_player == white else 2] += 1
+                        else:
+                            moves[current_player][5 if current_player == white else 1] += 1
+    return moves
+
+
+def analyze_player_performance(folder_path, focus_players=None):
+    """
+    Analyze player performance using accuracy and sharpness metrics.
+    Filter based on focus_players if provided.
+    """
+    player_metrics = {}
+    pgn_files = glob.glob(os.path.join(folder_path, "*.pgn"))
+    
+    for pgn_file in pgn_files:
+        with open(pgn_file, 'r') as pgn:
+            game = chess.pgn.read_game(pgn)
+            if game:
+                white = game.headers["White"]
+                black = game.headers["Black"]
+                if focus_players:
+                    players_to_analyze = [p for p in [white, black] if p in focus_players]
+                else:
+                    players_to_analyze = [white, black]
+
+                for player in players_to_analyze:
+                    if player not in player_metrics:
+                        player_metrics[player] = {"accuracies": [], "sharpness": []}
+                
+                node = game
+                prev_eval = None
+                
+                while not node.is_end():
+                    node = node.variations[0]
+                    current_player = white if node.turn() else black
+                    if focus_players and current_player not in focus_players:
+                        continue
+                    if node.comment:
+                        current_eval = functions.readComment(node, True, True)
+                        if current_eval and prev_eval:
+                            wdl, cp = current_eval
+                            prev_wdl, prev_cp = prev_eval
+                            
+                            # Calculate accuracy
+                            wp_before = functions.winP(prev_cp)
+                            wp_after = functions.winP(cp)
+                            accuracy = functions.accuracy(wp_before, wp_after)
+                            
+                            # Calculate sharpness
+                            sharpness = functions.sharpnessLC0(wdl)
+                            
+                            # Add to player metrics
+                            player_metrics[current_player]["accuracies"].append(accuracy)
+                            player_metrics[current_player]["sharpness"].append(sharpness)
+                        
+                        prev_eval = current_eval
+    
+    # Calculate average metrics for each player
+    for player, metrics in player_metrics.items():
+        metrics["avg_accuracy"] = statistics.mean(metrics["accuracies"]) if metrics["accuracies"] else 0
+        metrics["avg_sharpness"] = statistics.mean(metrics["sharpness"]) if metrics["sharpness"] else 0
+        metrics["total_moves"] = len(metrics["accuracies"])
+    
+    return player_metrics
+
+
+def analyze_accuracy_sharpness_correlation(player_performance):
+    """
+    Analyze the correlation between accuracy and sharpness for each player.
+    """
+    correlations = {}
+    for player, player_metrics in player_performance.items():
+        accuracies = player_metrics["accuracies"]
+        sharpness = player_metrics["sharpness"]
+        
+        # Calculate Pearson correlation coefficient
+        correlation, _ = stats.pearsonr(accuracies, sharpness)
+        correlations[player] = correlation
+        
+        # Create scatter plot
+        plt.figure(figsize=(10, 6))
+        plt.scatter(sharpness, accuracies, alpha=0.5)
+        plt.title(f"{player}: Accuracy vs Sharpness")
+        plt.xlabel("Sharpness")
+        plt.ylabel("Accuracy")
+        
+        # Add trend line
+        z = np.polyfit(sharpness, accuracies, 1)
+        p = np.poly1d(z)
+        plt.plot(sharpness, p(sharpness), "r--", alpha=0.8)
+        
+        # Add correlation coefficient to plot
+        plt.text(0.05, 0.95, f"Correlation: {correlation:.2f}", transform=plt.gca().transAxes)
+        
+        plt.savefig(f"accuracy_sharpness_{player.replace(' ', '_')}.png")
+        plt.close()
+        
+        # Calculate moving averages
+        window = min(50, len(accuracies) // 10)  # Use 10% of data points or 50, whichever is smaller
+        acc_ma = np.convolve(accuracies, np.ones(window), 'valid') / window
+        sharp_ma = np.convolve(sharpness, np.ones(window), 'valid') / window
+        
+        # Plot moving averages
+        plt.figure(figsize=(10, 6))
+        plt.plot(acc_ma, label="Accuracy MA")
+        plt.plot(sharp_ma, label="Sharpness MA")
+        plt.title(f"{player}: Moving Averages of Accuracy and Sharpness")
+        plt.xlabel("Move Number")
+        plt.ylabel("Value")
+        plt.legend()
+        plt.savefig(f"moving_averages_{player.replace(' ', '_')}.png")
+        plt.close()
+    
+    return correlations
+
+
+def plot_accuracy_over_moves(player_performance):
+    """
+    Plot accuracy over move numbers for each player.
+    """
+    for player, player_metrics in player_performance.items():
+        accuracies = player_metrics["accuracies"]
+        move_numbers = range(1, len(accuracies) + 1)
+        
+        plt.figure(figsize=(12, 6))
+        plt.plot(move_numbers, accuracies, marker='o', markersize=3, linestyle='-', linewidth=1)
+        plt.title(f"{player}: Accuracy over Moves")
+        plt.xlabel("Move Number")
+        plt.ylabel("Accuracy")
+        plt.ylim(0, 100)  # Assuming accuracy is between 0 and 100
+        
+        # Add a horizontal line for the average accuracy
+        avg_accuracy = player_metrics["avg_accuracy"]
+        plt.axhline(y=avg_accuracy, color='r', linestyle='--', label=f'Avg Accuracy: {avg_accuracy:.2f}')
+        
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"accuracy_over_moves_{player.replace(' ', '_')}.png", dpi=300)
+        plt.close()
+
+
+def plot_accuracy_and_sharpness_over_moves(player_performance):
+    """
+    Plot accuracy and sharpness over move numbers for each player.
+    """
+    for player, player_metrics in player_performance.items():
+        accuracies = player_metrics["accuracies"]
+        sharpness = player_metrics["sharpness"]
+        move_numbers = range(1, len(accuracies) + 1)
+        
+        fig, ax1 = plt.subplots(figsize=(12, 6))
+        
+        # Plot accuracy
+        color = 'tab:blue'
+        ax1.set_xlabel('Move Number')
+        ax1.set_ylabel('Accuracy', color=color)
+        ax1.plot(move_numbers, accuracies, color=color, marker='o', markersize=3, linestyle='-', linewidth=1, label='Accuracy')
+        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.set_ylim(0, 100)  # Assuming accuracy is between 0 and 100
+        
+        # Add a horizontal line for the average accuracy
+        avg_accuracy = player_metrics["avg_accuracy"]
+        ax1.axhline(y=avg_accuracy, color=color, linestyle='--', label=f'Avg Accuracy: {avg_accuracy:.2f}')
+        
+        # Create a second y-axis for sharpness
+        ax2 = ax1.twinx()
+        color = 'tab:orange'
+        ax2.set_ylabel('Sharpness', color=color)
+        ax2.plot(move_numbers, sharpness, color=color, marker='s', markersize=3, linestyle='-', linewidth=1, label='Sharpness')
+        ax2.tick_params(axis='y', labelcolor=color)
+        
+        # Add a horizontal line for the average sharpness
+        avg_sharpness = player_metrics["avg_sharpness"]
+        ax2.axhline(y=avg_sharpness, color=color, linestyle='--', label=f'Avg Sharpness: {avg_sharpness:.2f}')
+        
+        plt.title(f"{player}: Accuracy and Sharpness over Moves")
+        
+        # Combine legends
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+        
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(f"accuracy_sharpness_over_moves_{player.replace(' ', '_')}.png", dpi=300)
+        plt.close()
+
 
 if __name__ == '__main__':
-    # t = '../out/candidates2024-WDL+CP.pgn'
-    oo = 'out/tournament/2024-fide-chess-olympiad/raw/open.pgn'
-    ow = 'out/games/2024-fide-womens-chess-olympiad.pgn'
-    nicknames = {'Nepomniachtchi': 'Nepo', 'Praggnanandhaa R': 'Pragg'}
-    nicknames2 = {'Lei': 'Lei Tingjie', 'Ju': 'Ju Wenjun'}
-    # players = getPlayers(oo)
-    # games = glob.glob('../out/games/*')
-
-    # Split the PGN file into individual games
-    split_output_folder = 'out/tournament/2024-fide-chess-olympiad/split/'
-    split_pgn_file(oo, split_output_folder)
-
-    # Process the split PGN files
-    split_pgn_files = glob.glob(os.path.join(split_output_folder, "*.pgn"))
-    for split_pgn in split_pgn_files:
-        generateTournamentPlots(split_pgn, nicknames2, f'../out/olympiadOpen_{os.path.basename(split_pgn).split(".")[0]}')
-
-    # generateTournamentPlots(ow, nicknames2, '../out/olympiadWomen')
-    # IMB = getInaccMistakesBlunders(nwc)
-    # plotBarChart(IMB, ['Inaccuracies', 'Mistakes', 'Blunders'], 'Number of inaccuracies, mistakes and blunders', 'Number of moves', nicknames, '../out/NorwayChessOpenIMB.png', sortIndex=0)
-
-    # df = getMoveData(games)
-    # plotAccuracyDistribution(df)
-    # generateTournamentPlots(t, nicknames)
-    # generateAccDistributionGraphs(t, players)
-    # scores = getPlayerScores(t)
-    # createMovePlot(getMoveSituation(t), nicknames)
-    # sharpChange = analysis.sharpnessChangePerPlayer(t)
-    # analysis.plotSharpChange(sharpChange, short=nicknames)
-    # plotScores(scores, nicknames)
-    # worse = worseGames(t)
-    # plotWorseGames(worse, nicknames)
-    # plotWorseGames(betterGames(t), nicknames)
-
-    # scores = {'Carlsen': [9, 6, 1.5, 1], 
-    #           'Nakamura': [7, 7, 1, 0.5],
-    #           'Pragg': [9, 4, 1.5, 0],
-    #           'Firouzja': [7, 4, 1.5, 1],
-    #           'Caruana': [6, 4, 0.5, 1],
-    #           'Ding': [4, 2, 0.5, 0.5]}
-    # # plotScoresArmageddon(scores, '../out/NorwayChessOpenArmScores.png')
-    # scoresW = {'Ju Wenjun': [9, 7, 1.5, 1.5],
-    #            'Muzychuk': [7, 7, 1, 1],
-    #            'Lei Tingjie': [9, 4, 0.5, 1],
-    #            'Vaishali': [6, 5, 1, 0.5],
-    #            'Humpy Koneru': [6, 3, 0.5, 0.5],
-    #            'Cramling': [4, 3, 0, 1]}
-    # plotScoresArmageddon(scoresW, '../out/NorwayChessWomenArmScores.png')
-
-    """
-    arjunC = '../out/arjun_closed.pgn'
-    arjunO = '../out/arjun_open-5000-30.pgn'
-    name = 'Erigaisi, Arjun'
-    WL = [name]
-    p2 = getPlayers(arjunC, WL)
-    sharpC = analysis.sharpnessChangePerPlayer(arjunC)
-    sharpO = analysis.sharpnessChangePerPlayer(arjunO)
-
-    sharpChange = {f'{name}\nClosed': sharpC[name], f'{name}\nOpen': sharpO[name]}
-    # analysis.plotSharpChange(sharpChange, filename='../out/sharpArjun.png')
-    plotMultAccDistributions([arjunC, arjunO], filename='../out/arjunAccDis.png')
-    # generateAccDistributionGraphs(arjunC, p2)
-    # generateAccDistributionGraphs(arjunO, p2)
-    # analysis.plotSharpChange(analysis.sharpnessChangePerPlayer(arjunC))
-    """
+    input_folder = 'out/pgn/0929OlympiadAusWomen/comment/done'
+    
+    # Step 1: Read and print all player names
+    players = get_all_players(input_folder, FOCUS_PLAYERS)
+    print("Players analyzed in the tournament:")
+    for player in players:
+        print(f"- {player}")
+    print(f"Total number of players analyzed: {len(players)}")
+    
+    # Step 2: Calculate and display player scores
+    scores = get_player_scores(input_folder, FOCUS_PLAYERS)
+    print("\nPlayer Scores:")
+    for player, (games, points) in sorted(scores.items(), key=lambda x: x[1][1], reverse=True):
+        print(f"{player}: {points}/{games} points")
+    
+    # Step 3: Analyze move situations
+    move_situations = get_move_situation(input_folder, FOCUS_PLAYERS)
+    print("\nMove Situations:")
+    for player, situations in sorted(move_situations.items(), key=lambda x: x[1][0], reverse=True):
+        total, much_better, slightly_better, equal, slightly_worse, much_worse = situations
+        print(f"{player}:")
+        print(f"  Total moves: {total}")
+        print(f"  Much better: {much_better} ({much_better/total*100:.2f}%)")
+        print(f"  Slightly better: {slightly_better} ({slightly_better/total*100:.2f}%)")
+        print(f"  Equal: {equal} ({equal/total*100:.2f}%)")
+        print(f"  Slightly worse: {slightly_worse} ({slightly_worse/total*100:.2f}%)")
+        print(f"  Much worse: {much_worse} ({much_worse/total*100:.2f}%)")
+        print()
+    
+    # Step 4: Analyze player performance
+    player_performance = analyze_player_performance(input_folder, FOCUS_PLAYERS)
+    print("\nPlayer Performance Analysis:")
+    for player, player_metrics in sorted(player_performance.items(), key=lambda x: x[1]["avg_accuracy"], reverse=True):
+        print(f"{player}:")
+        print(f"  Total moves: {player_metrics['total_moves']}")
+        print(f"  Average accuracy: {player_metrics['avg_accuracy']:.2f}")
+        print(f"  Average sharpness: {player_metrics['avg_sharpness']:.2f}")
+        print()
+    
+    # Step 5: Analyze correlation between accuracy and sharpness
+    correlations = analyze_accuracy_sharpness_correlation(player_performance)
+    print("\nCorrelations between Accuracy and Sharpness:")
+    for player, correlation in sorted(correlations.items(), key=lambda x: x[1], reverse=True):
+        print(f"{player}: {correlation:.2f}")
+        print(f"  Total moves: {player_metrics['total_moves']}")
+        print(f"  Average accuracy: {player_metrics['avg_accuracy']:.2f}")
+        print(f"  Average sharpness: {player_metrics['avg_sharpness']:.2f}")
+        print()
+    
+    # New Step: Plot accuracy and sharpness over moves for each player
+    plot_accuracy_and_sharpness_over_moves(player_performance)

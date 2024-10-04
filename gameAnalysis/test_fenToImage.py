@@ -29,4 +29,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    main(args.input_csv if args.input_csv else r'\out\pgn\0923Alice\comment\20240923040516move_details.csv')
+    main(args.input_csv if args.input_csv else r'\out\pgn\0929OlympiadAusWomen\comment\20240929225146move_details.csv')

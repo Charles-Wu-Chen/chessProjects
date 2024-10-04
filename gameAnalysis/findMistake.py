@@ -1,31 +1,43 @@
-# This file should contain different functions to analyse a chess game
-# TODO: analysis with WDL+CP is very janky
-import os, sys
-from datetime import datetime
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from chess import engine, pgn, Board
-import chess
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
-import functions
-from functions import *
-import logging
-import evalDB
-from glob import glob
+import os
+import sys
+import re
 import csv
 import shutil
 import traceback
+import chess
+import logging
+
+from datetime import datetime
+from glob import glob
+
+
+from chess import engine, Board 
+
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import functions
+from functions import configureEngine, analysisCPnWDL, analysisCP, analysisWDL, formatInfo
 import fenToImage
+import evalDB
 
+# Constants
+ENCODING = 'utf-8'
 
+# Add this near the top of the file, after the imports
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# encoding = "GB2312"
-encoding = 'utf-8'
+def normalize_name(name: str) -> str:
+    """Convert to lowercase, remove whitespace and special characters."""
+    return re.sub(r'\W+', '', name.lower())
 
+def get_wdl_from_comment(comment: str) -> list:
+    """Extract WDL values from a comment string."""
+    pattern = r'\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]'
+    match = re.search(pattern, comment)
+    return list(map(int, match.groups())) if match else []
 
-def makeComments(gamesFile: str, outfile: str, analysis, limit: int, engine: engine, sf: engine, cache: bool = False) -> list:
+def make_comments(games_file: str, outfile: str, analysis, limit: int, engine: engine, sf: engine, cache: bool = False) -> list:
     """
     This function plays thorugh the games in a file and makes comments to them.
     The specific comments depend on the analysis method chosen
@@ -43,29 +55,22 @@ def makeComments(gamesFile: str, outfile: str, analysis, limit: int, engine: eng
     return -> list
         A list of lists for each game, containing the WDL and score after every move
     """
-    
-    gameNR = 1
-    with open(gamesFile, 'r',encoding=encoding) as pgn:
+    logger.info(f"Starting to make comments for file: {games_file}")
+    game_nr = 1
+    with open(games_file, 'r', encoding=ENCODING) as pgn:
         while (game := chess.pgn.read_game(pgn)):
-            print(f'Starting with game {gameNR}...')
-            gameNR += 1
+            print(f'Starting with game {game_nr}...')
+            game_nr += 1
 
             board = game.board()
-            
-            # I found no way to add comments to an existing PGN, so I create a new PGN with the comments
-            newGame = chess.pgn.Game()
-            newGame.headers = game.headers
+            new_game = chess.pgn.Game()
+            new_game.headers = game.headers
 
             for move in game.mainline_moves():
                 print(move)
-                # Checks if we have the starting position and need to make a new node
-                if board == game.board():
-                    node = newGame.add_variation(move)
-                else:
-                    node = node.add_variation(move)
-
+                node = new_game.add_variation(move) if board == game.board() else node.add_variation(move)
                 board.push(move)
-                # Adds a comment after every move with the wdl
+
                 if cache:
                     pos = board.fen()
                     posDB = functions.modifyFEN(pos)
@@ -98,202 +103,160 @@ def makeComments(gamesFile: str, outfile: str, analysis, limit: int, engine: eng
                             evalDB.insert(posDB, nodes=limit, cp=cp, w=wdl[0], d=wdl[1], l=wdl[2], depth=iSF['depth'])
                 else:
                     node.comment = analysis(board, engine, limit)
-            print(newGame, file=open(outfile, 'a+'), end='\n\n')
-    # engine.quit()
+
+            print(new_game, file=open(outfile, 'a+'), end='\n\n')
+    logger.info(f"Finished making comments for file: {games_file}")
     return []
 
-def normalize_name(name: str) -> str:
-    """Convert to lowercase, remove whitespace and special characters."""
-    return re.sub(r'\W+', '', name.lower())
+def find_mistakes(pgn_path: str, sf: engine, player_name: str = None, mistake_value: int = 200) -> list:
+    """Find mistakes in a chess game based on WDL evaluations."""
+    logger.info(f"Starting to find mistakes in file: {pgn_path}")
+    positions = []
+    pgn_file_name = os.path.basename(pgn_path)
 
-
-def findMistakes(pgnPath: str, sf: engine, playerName: str = None, mistakeValue: int = 200) -> list:
-    """
-    This function takes a PGN with WDL evaluations and finds the mistakes in the game
-    pgnPath: str
-        The path to the PGN file
-    return: list
-        A list with the positions where mistakes occured
-    """
-
-
-    lastWDL = None
-    positions = list()
-    
-    pgn_file_name = os.path.basename(pgnPath)
-
-    with open(pgnPath, 'r', encoding=encoding) as pgn:
+    with open(pgn_path, 'r', encoding=ENCODING) as pgn:
         while (game := chess.pgn.read_game(pgn)):
             node = game
             white_player = game.headers.get("White", "Unknown")
             black_player = game.headers.get("Black", "Unknown")
             previous_move = None
+
             while not node.is_end():
-                
-                
                 if node.comment:
-                    lastWDL = getWDLfromComment(node.comment)
+                    last_wdl = get_wdl_from_comment(node.comment)
                 else:
                     node = node.variations[0]
                     continue
 
                 board = node.board()
                 pos = board.fen()
-                sharpness = functions.sharpnessLC0(lastWDL)
+                sharpness = functions.sharpnessLC0(last_wdl)
                 node = node.variations[0]
                 turn = "White" if board.turn else "Black"
-                if board.turn == chess.WHITE:
-                    current_player = white_player
-                else:
-                    current_player = black_player
-                if node.comment:
-                    currWDL = getWDLfromComment(node.comment)
-                    if node.turn() == chess.WHITE:
-                        diff = currWDL[0]+currWDL[1]*0.5-(lastWDL[0]+lastWDL[1]*0.5)
-                    else:
-                        diff = currWDL[2]+currWDL[1]*0.5-(lastWDL[2]+lastWDL[1]*0.5)
+                current_player = white_player if board.turn else black_player
 
-                    # print(f"diff  {diff} for move {node.move} with current wdl {currWDL}")
-                    if diff > mistakeValue:
-                        if playerName:
-                            normalized_player_name = normalize_name(playerName)
-                            normalized_current_player = normalize_name(current_player)
-                            if normalized_player_name not in normalized_current_player:
-                                previous_move = board.san(node.move)
-                                # print (f"normalized_player_name  {normalized_player_name} normalized_current_player {normalized_current_player} ")
-                                continue # only generate puzzle for the player if name provided.
-                        bestMove = sf.analyse(board, chess.engine.Limit(depth=20))['pv'][0]
-                        positions.append(
-                            {
-                                "id": None,
-                                "White Player": white_player,
-                                "Black Player": black_player,
-                                "Current Turn": turn,
-                                "Previous Move": previous_move,
-                                "Game Move": board.san(node.move),
-                                "Best Move": board.san(bestMove),
-                                "PGN File": pgn_file_name,
-                                "FEN": pos,
-                                "Sharpness": sharpness
-                            }
-                        )
+                if node.comment:
+                    curr_wdl = get_wdl_from_comment(node.comment)
+                    diff = calculate_wdl_diff(curr_wdl, last_wdl, node.turn())
+
+                    if diff > mistake_value:
+                        if should_generate_puzzle(player_name, current_player):
+                            best_move = sf.analyse(board, engine.Limit(depth=20))['pv'][0]
+                            positions.append(create_position_dict(white_player, black_player, turn, previous_move, board, node.move, best_move, pgn_file_name, pos, sharpness, last_wdl))
+
                 previous_move = board.san(node.move)
+
+    logger.info(f"Finished finding mistakes in file: {pgn_path}. Found {len(positions)} positions.")
     return positions
 
-
-def getWDLfromComment(comment: str) -> []:
-        # Regular expression to capture the three numbers inside square brackets
-    pattern = r'\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]'
-    
-    # Search for the pattern in the string
-    match = re.search(pattern, comment)
-    
-    if match:
-        # Extract the numbers and convert them to integers
-        num1, num2, num3 = map(int, match.groups())
-        return [num1, num2, num3]
+def calculate_wdl_diff(curr_wdl, last_wdl, turn):
+    if turn == chess.WHITE: 
+        return curr_wdl[0] + curr_wdl[1] * 0.5 - (last_wdl[0] + last_wdl[1] * 0.5)
     else:
-        # Return an empty list if the pattern is not found
-        return []
-    
+        return curr_wdl[2] + curr_wdl[1] * 0.5 - (last_wdl[2] + last_wdl[1] * 0.5)
 
-def process_pgn_folder(input_folder: str, sf : engine, player_name: str = None, mistakeValue: int = 200):
-    # Ensure the input folder exists
+def should_generate_puzzle(player_name, current_player):
+    if player_name:
+        return normalize_name(player_name) in normalize_name(current_player)
+    return True
+
+def create_position_dict(white_player, black_player, turn, previous_move, board, game_move, best_move, pgn_file_name, pos, sharpness, last_wdl):
+    return {
+        "id": None,
+        "White Player": white_player,
+        "Black Player": black_player,
+        "Current Turn": turn,
+        "Previous Move": previous_move,
+        "Game Move": board.san(game_move),
+        "Best Move": board.san(best_move),
+        "PGN File": pgn_file_name,
+        "FEN": pos,
+        "Sharpness": f"{sharpness:.3f}",  # Format sharpness to 3 decimal places
+        "WDL": str(last_wdl)  # Add the WDL value
+    }
+
+def process_pgn_folder(input_folder: str, sf: engine, player_name: str = None, mistake_value: int = 200):
+    """Process all PGN files in a folder to find mistakes."""
+    logger.info(f"Starting to process PGN folder: {input_folder}")
     if not os.path.isdir(input_folder):
         raise ValueError(f"The input folder '{input_folder}' does not exist.")
     
-    os.makedirs(input_folder+"\\"+"done" , exist_ok=True)
-    # Get all PGN files in the input folder
+    os.makedirs(os.path.join(input_folder, "done"), exist_ok=True)
     pgn_files = glob(os.path.join(input_folder, "*.pgn"))
 
-    # Get the current date and time
     timestamp_str = current_time_str("%Y%m%d%H%M%S")
-    running_number = 1  # Initialize running number
-    # Define the output CSV file path within the input folder
-    filename = timestamp_str+"move_details.csv"
+    filename = f"{timestamp_str}move_details.csv"
     output_csv_path = os.path.join(input_folder, filename)
+
     with open(output_csv_path, mode='w', newline='') as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=[
-            "ID",  "White Player", "Black Player", "Current Turn",
-            "Previous Move", "Game Move", "Best Move","PGN File", "FEN", "Sharpness"
+            "ID", "White Player", "Black Player", "Current Turn",
+            "Previous Move", "Game Move", "Best Move", "PGN File", "FEN", "Sharpness", "WDL"
         ])
         writer.writeheader()
-    
-    # Process each PGN file
+
+    running_number = 1
     for pgn_file in pgn_files:
         try:
-            results = findMistakes(pgn_file, sf, player_name, mistakeValue)
+            results = find_mistakes(pgn_file, sf, player_name, mistake_value)
             
             with open(output_csv_path, mode='a', newline='') as csv_file:
                 writer = csv.DictWriter(csv_file, fieldnames=[
-                "id", "White Player", "Black Player", "Current Turn",
-                "Previous Move", "Game Move", "Best Move", "PGN File", "FEN", "Sharpness"
-            ])
+                    "id", "White Player", "Black Player", "Current Turn",
+                    "Previous Move", "Game Move", "Best Move", "PGN File", "FEN", "Sharpness", "WDL"
+                ])
                 for result in results:
-                    id = running_number
+                    result["id"] = running_number
                     running_number += 1
-                    result["id"] = id
                     writer.writerow(result)
                     print(f"Result line {result}")
                 
-            shutil.move(pgn_file, input_folder+"\\"+"done")
-            
+            shutil.move(pgn_file, os.path.join(input_folder, "done"))
 
         except Exception as e: 
-            # Print the exception type and message
             print(f"An error occurred: {e}")
-            
-            # Print the detailed traceback information
             traceback.print_exc()
             continue
+
+    logger.info(f"Finished processing PGN folder. Output CSV: {output_csv_path}")
     return filename
 
-def current_time_str(format : str):
-    current_timestamp = datetime.now()
+def current_time_str(format: str):
+    """Get current time as a formatted string."""
+    return datetime.now().strftime(format)
 
-    # Format it as a string
-    timestamp_str = current_timestamp.strftime(format)
-    return timestamp_str
-    
-    
-    
 def split_pgn_file(pgn_file_path, output_directory):
-    # Ensure the output directory exists
+    """Split a PGN file into individual game files."""
+    logger.info(f"Starting to split PGN file: {pgn_file_path}")
     os.makedirs(output_directory, exist_ok=True)
     
-    # Open the PGN file
-    with open(pgn_file_path, encoding=encoding) as pgn_file:
+    with open(pgn_file_path, encoding=ENCODING) as pgn_file:
         game_count = 1
         while True:
-            # Parse each game
             game = chess.pgn.read_game(pgn_file)
             if game is None:
                 break
             
-            # Extract player names
             white_player = game.headers.get("White", "Unknown").replace(" ", "_")
             black_player = game.headers.get("Black", "Unknown").replace(" ", "_")
             
             timestamp_str = current_time_str("%d%H%M%S%f")
-
-            # Create a unique filename
             filename = f"{game_count}_{white_player}_vs_{black_player}_{timestamp_str}.pgn"
             filename = re.sub(r'[,<>:"/\\|?*]', '_', filename)
             output_path = os.path.join(output_directory, filename)
             
-            # Save the game to a new PGN file
             with open(output_path, 'w') as output_file:
                 exporter = chess.pgn.FileExporter(output_file)
                 game.accept(exporter)
             
             game_count += 1
 
-    print(f"Split PGN file into {game_count - 1} individual games.")
-
+    logger.info(f"Finished splitting PGN file into {game_count - 1} individual games.")
 
 if __name__ == '__main__':
+    logger.info("Starting main execution of findMistake.py")
 
-    input_folder = r"\out\pgn\0924TueNight"
+    input_folder = r"\out\pgn\0929OlympiadAusWomen"
     player_name = None
     mistakeValue = 200
 
@@ -332,7 +295,7 @@ if __name__ == '__main__':
         for pgn_file in pgn_files:
             file_name = os.path.basename(pgn_file)
             try: 
-                results = makeComments(pgn_file, comment_directory+"\\"+file_name, analysisCPnWDL, 5000, leela, sf, True)
+                results = make_comments(pgn_file, comment_directory+"\\"+file_name, analysisCPnWDL, 5000, leela, sf, True)
                 os.makedirs(split_directory+"\\done\\", exist_ok=True)
                 shutil.move(pgn_file, split_directory+"\\done\\"+file_name)
             except Exception as exc:
@@ -350,10 +313,4 @@ if __name__ == '__main__':
     output_image_path = comment_directory+"\\img\\"
     os.makedirs(output_image_path , exist_ok=True)
     fenToImage.generate_images_from_csv(csv_file_path, output_image_path)
-
-    
-
-
-
-
-    
+    logger.info("Finished main execution of findMistake.py")

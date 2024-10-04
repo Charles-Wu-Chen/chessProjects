@@ -1,0 +1,68 @@
+
+
+
+# if __name__ == '__main__':
+#     # t = '../out/candidates2024-WDL+CP.pgn'
+#     oo = 'out/tournament/2024-fide-chess-olympiad/raw/open.pgn'
+#     ow = 'out/games/2024-fide-womens-chess-olympiad.pgn'
+#     nicknames = {'Nepomniachtchi': 'Nepo', 'Praggnanandhaa R': 'Pragg'}
+#     nicknames2 = {'Lei': 'Lei Tingjie', 'Ju': 'Ju Wenjun'}
+#     # players = getPlayers(oo)
+#     # games = glob.glob('../out/games/*')
+
+#     # Split the PGN file into individual games
+#     split_output_folder = 'out/tournament/2024-fide-chess-olympiad/split/'
+#     split_pgn_file(oo, split_output_folder)
+
+#     # Process the split PGN files
+#     split_pgn_files = glob.glob(os.path.join(split_output_folder, "*.pgn"))
+#     for split_pgn in split_pgn_files:
+#         generateTournamentPlots(split_pgn, nicknames2, f'../out/olympiadOpen_{os.path.basename(split_pgn).split(".")[0]}')
+
+    # generateTournamentPlots(ow, nicknames2, '../out/olympiadWomen')
+    # IMB = getInaccMistakesBlunders(nwc)
+    # plotBarChart(IMB, ['Inaccuracies', 'Mistakes', 'Blunders'], 'Number of inaccuracies, mistakes and blunders', 'Number of moves', nicknames, '../out/NorwayChessOpenIMB.png', sortIndex=0)
+
+    # df = getMoveData(games)
+    # plotAccuracyDistribution(df)
+    # generateTournamentPlots(t, nicknames)
+    # generateAccDistributionGraphs(t, players)
+    # scores = getPlayerScores(t)
+    # createMovePlot(getMoveSituation(t), nicknames)
+    # sharpChange = analysis.sharpnessChangePerPlayer(t)
+    # analysis.plotSharpChange(sharpChange, short=nicknames)
+    # plotScores(scores, nicknames)
+    # worse = worseGames(t)
+    # plotWorseGames(worse, nicknames)
+    # plotWorseGames(betterGames(t), nicknames)
+    # scores = {'Carlsen': [9, 6, 1.5, 1], 
+    #           'Nakamura': [7, 7, 1, 0.5],
+    #           'Pragg': [9, 4, 1.5, 0],
+    #           'Firouzja': [7, 4, 1.5, 1],
+    #           'Caruana': [6, 4, 0.5, 1],
+    #           'Ding': [4, 2, 0.5, 0.5]}
+    # # plotScoresArmageddon(scores, '../out/NorwayChessOpenArmScores.png')
+    # scoresW = {'Ju Wenjun': [9, 7, 1.5, 1.5],
+    #            'Muzychuk': [7, 7, 1, 1],
+    #            'Lei Tingjie': [9, 4, 0.5, 1],
+    #            'Vaishali': [6, 5, 1, 0.5],
+    #            'Humpy Koneru': [6, 3, 0.5, 0.5],
+    #            'Cramling': [4, 3, 0, 1]}
+    # plotScoresArmageddon(scoresW, '../out/NorwayChessWomenArmScores.png')
+
+    """
+    arjunC = '../out/arjun_closed.pgn'
+    arjunO = '../out/arjun_open-5000-30.pgn'
+    name = 'Erigaisi, Arjun'
+    WL = [name]
+    p2 = getPlayers(arjunC, WL)
+    sharpC = analysis.sharpnessChangePerPlayer(arjunC)
+    sharpO = analysis.sharpnessChangePerPlayer(arjunO)
+
+    sharpChange = {f'{name}\nClosed': sharpC[name], f'{name}\nOpen': sharpO[name]}
+    # analysis.plotSharpChange(sharpChange, filename='../out/sharpArjun.png')
+    plotMultAccDistributions([arjunC, arjunO], filename='../out/arjunAccDis.png')
+    # generateAccDistributionGraphs(arjunC, p2)
+    # generateAccDistributionGraphs(arjunO, p2)
+    # analysis.plotSharpChange(analysis.sharpnessChangePerPlayer(arjunC))
+    """

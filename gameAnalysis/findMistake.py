@@ -141,6 +141,7 @@ def find_mistakes(pgn_path: str, sf: engine, player_name: str = None, mistake_va
 
                     if diff > mistake_value:
                         if should_generate_puzzle(player_name, current_player):
+                            logger.info(f"Mistake found - Player: {current_player}, Turn: {turn}, File: {pgn_file_name}, FEN: {pos}, Last WDL: {last_wdl}, Sharpness: {sharpness:.3f}, Previous Move: {previous_move}, Game Move: {board.san(node.move)}, curr_wdl: {curr_wdl}")
                             best_move = sf.analyse(board, engine.Limit(depth=20))['pv'][0]
                             positions.append(create_position_dict(white_player, black_player, turn, previous_move, board, node.move, best_move, pgn_file_name, pos, sharpness, last_wdl))
 
@@ -256,7 +257,7 @@ def split_pgn_file(pgn_file_path, output_directory):
 if __name__ == '__main__':
     logger.info("Starting main execution of findMistake.py")
 
-    input_folder = r"\out\pgn\0929OlympiadAusWomen"
+    input_folder = r"\out\pgn\1008night"
     player_name = None
     mistakeValue = 200
 

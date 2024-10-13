@@ -6,7 +6,7 @@ conda activate chessproject
 pip install -r requirements.txt
 
 
-this is to support SVG image output.  it is a requirement for cairosvg
+# This is to support SVG image output. It is a requirement for cairosvg
 
 For Windows:
 Install GTK+ and Cairo:
@@ -23,3 +23,16 @@ You can install CairoSVG through pip:
 bash
 Copy code
 pip install cairosvg
+
+# Running tests
+
+To run the tests for the sharpnessLC0 function:
+
+1. Ensure that you have the `functions.py` and `test_sharpness_lc0.py` files in the same directory.
+2. Open a command prompt or terminal.
+3. Navigate to the directory containing these files.
+4. Run the following command:
+
+   python -m unittest test_sharpness_lc0.py
+
+This will execute the test cases and display the results in the console.

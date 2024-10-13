@@ -722,6 +722,7 @@ def analyze_player_performance(folder_path, focus_players=None):
     pgn_files = glob.glob(os.path.join(folder_path, "*.pgn"))
     
     for pgn_file in pgn_files:
+        print(f"Processing file: {pgn_file}")  # Debug print
         with open(pgn_file, 'r') as pgn:
             game = chess.pgn.read_game(pgn)
             if game:
@@ -758,17 +759,31 @@ def analyze_player_performance(folder_path, focus_players=None):
                             # Calculate sharpness
                             sharpness = functions.sharpnessLC0(wdl)
                             
+                            print(f"Player: {current_player}, Accuracy: {accuracy}, Sharpness: {sharpness}")  # Debug print
+                            
                             # Add to player metrics
                             player_metrics[current_player]["accuracies"].append(accuracy)
                             player_metrics[current_player]["sharpness"].append(sharpness)
                         
                         prev_eval = current_eval
     
+    
     # Calculate average metrics for each player
     for player, metrics in player_metrics.items():
-        metrics["avg_accuracy"] = statistics.mean(metrics["accuracies"]) if metrics["accuracies"] else 0
-        metrics["avg_sharpness"] = statistics.mean(metrics["sharpness"]) if metrics["sharpness"] else 0
-        metrics["total_moves"] = len(metrics["accuracies"])
+        print(max(metrics["accuracies"]))
+        print(max(metrics["sharpness"]))
+        total_accuracy = sum(metrics["accuracies"])
+        total_sharpness = sum(metrics["sharpness"])
+        total_moves = len(metrics["accuracies"])
+        
+        metrics["avg_accuracy"] = total_accuracy / total_moves if total_moves > 0 else 0
+        metrics["avg_sharpness"] = total_sharpness / total_moves if total_moves > 0 else 0
+        metrics["total_moves"] = total_moves
+        
+        print(f"Player: {player}")
+        print(f"  Total Accuracy: {total_accuracy}, Total Sharpness: {total_sharpness}")
+        print(f"  Total Moves: {total_moves}")
+        print(f"  Avg Accuracy: {metrics['avg_accuracy']}, Avg Sharpness: {metrics['avg_sharpness']}")
     
     return player_metrics
 

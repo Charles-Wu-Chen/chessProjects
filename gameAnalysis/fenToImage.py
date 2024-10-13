@@ -62,11 +62,8 @@ def generate_chess_image(fen: str, output_file: str, white_player: str = "White"
     draw.text((5, start_y + line_height), f"{white_player} (W) vs {black_player} (B)", fill="black", font=font)
     draw.text((5, start_y + 2*line_height), f"Side to Move: {side_to_move}", fill="black", font=font)
     draw.text((5, start_y + 3*line_height), f"Previous Move: {previous_move}", fill="black", font=font)
-    draw.text((5, start_y + 4*line_height), f"Sharpness: {sharpness}", fill="black", font=font)
-        # Add WDL to the right side of the same line
-    wdl_text = f"WDL: {wdl}"
-    wdl_width = draw.textlength(wdl_text, font=font)
-    draw.text((new_width - wdl_width - 5, start_y + 4*line_height), wdl_text, fill="black", font=font)
+    draw.text((5, start_y + 4*line_height), f"WDL: {wdl}", fill="black", font=font)
+
 
     # Save the final image
     new_image.save(output_file)

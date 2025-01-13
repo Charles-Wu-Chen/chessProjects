@@ -19,12 +19,13 @@ import functions
 from functions import configureEngine, analysisCPnWDL, analysisCP, analysisWDL, formatInfo
 import fenToImage
 import evalDB
+from config import LEELA_PATH, STOCKFISH_PATH, LEELA_OPTIONS, STOCKFISH_OPTIONS
 
 # Constants
 ENCODING = 'utf-8'
 
 # Add this near the top of the file, after the imports
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def normalize_name(name: str) -> str:
@@ -85,11 +86,10 @@ def make_comments(games_file: str, outfile: str, analysis, limit: int, engine: e
                         if evalDict['nodes'] <= 0:
                             wdl = analysisWDL(board, engine, limit, sf)
                             wdlList = [int(x) for x in wdl[1:-1].split(',')]
-                            print(wdlList)
                             evalDB.update(position=posDB, nodes=limit, w=wdlList[0], d=wdlList[1], l=wdlList[2])
-                            print(f'WDL calculated: {wdl}')
-                        print('Cache hit!')
-                        print(wdl, cp)
+                            logger.debug(f'WDL calculated: {wdl}')
+
+                        logger.debug(f'Cache hit! WDL: {wdl}, CP: {cp}')
                         node.comment = f'{str(wdl)};{cp}'
                     else:
                         infos = analysis(board, engine, limit, sf)
@@ -108,7 +108,7 @@ def make_comments(games_file: str, outfile: str, analysis, limit: int, engine: e
     logger.info(f"Finished making comments for file: {games_file}")
     return []
 
-def find_mistakes(pgn_path: str, sf: engine, player_name: str = None, mistake_value: int = 200) -> list:
+def find_mistakes(pgn_path: str, sf: engine, player_name: str = None, mistake_value: int = 200, debug: bool = False) -> list:
     """Find mistakes in a chess game based on WDL evaluations."""
     logger.info(f"Starting to find mistakes in file: {pgn_path}")
     positions = []
@@ -116,12 +116,16 @@ def find_mistakes(pgn_path: str, sf: engine, player_name: str = None, mistake_va
 
     with open(pgn_path, 'r', encoding=ENCODING) as pgn:
         while (game := chess.pgn.read_game(pgn)):
+            if debug:
+                logger.debug(f"Processing game: White: {game.headers.get('White')}, Black: {game.headers.get('Black')}")
             node = game
             white_player = game.headers.get("White", "Unknown")
             black_player = game.headers.get("Black", "Unknown")
             previous_move = None
 
             while not node.is_end():
+                if debug and node.comment:
+                    logger.debug(f"Position WDL before move: {get_wdl_from_comment(node.comment)}")
                 if node.comment:
                     last_wdl = get_wdl_from_comment(node.comment)
                 else:
@@ -138,6 +142,17 @@ def find_mistakes(pgn_path: str, sf: engine, player_name: str = None, mistake_va
                 if node.comment:
                     curr_wdl = get_wdl_from_comment(node.comment)
                     diff = calculate_wdl_diff(curr_wdl, last_wdl, node.turn())
+                    
+                    if debug:
+                        logger.debug(f"WDL diff: {diff}, Threshold: {mistake_value}")
+                        logger.debug(f"Current WDL: {curr_wdl}, Last WDL: {last_wdl}")
+                        logger.debug(
+                            f"Position Details:\n"
+                            f"  Players: {white_player} (White) vs {black_player} (Black)\n"
+                            f"  Turn: {turn}\n"
+                            f"  Moves: Previous={previous_move}, Current={board.san(node.move)}\n"
+                            f"  Position Metrics: Sharpness={sharpness:.3f}, Last WDL={last_wdl}"
+                        )
 
                     if diff > mistake_value:
                         if should_generate_puzzle(player_name, current_player):
@@ -176,14 +191,20 @@ def create_position_dict(white_player, black_player, turn, previous_move, board,
         "WDL": str(last_wdl)  # Add the WDL value
     }
 
-def process_pgn_folder(input_folder: str, sf: engine, player_name: str = None, mistake_value: int = 200):
+def process_pgn_folder(input_folder: str, sf: engine, player_name: str = None, mistake_value: int = 200, debug: bool = False):
     """Process all PGN files in a folder to find mistakes."""
     logger.info(f"Starting to process PGN folder: {input_folder}")
+    if debug:
+        logger.debug(f"Parameters - Player: {player_name}, Mistake Value: {mistake_value}")
+    
     if not os.path.isdir(input_folder):
         raise ValueError(f"The input folder '{input_folder}' does not exist.")
     
     os.makedirs(os.path.join(input_folder, "done"), exist_ok=True)
     pgn_files = glob(os.path.join(input_folder, "*.pgn"))
+    
+    if debug:
+        logger.debug(f"Found {len(pgn_files)} PGN files to process")
 
     timestamp_str = current_time_str("%Y%m%d%H%M%S")
     filename = f"{timestamp_str}move_details.csv"
@@ -198,9 +219,14 @@ def process_pgn_folder(input_folder: str, sf: engine, player_name: str = None, m
 
     running_number = 1
     for pgn_file in pgn_files:
+        if debug:
+            logger.debug(f"Processing file: {os.path.basename(pgn_file)}")
         try:
-            results = find_mistakes(pgn_file, sf, player_name, mistake_value)
+            results = find_mistakes(pgn_file, sf, player_name, mistake_value, debug)
             
+            if debug:
+                logger.debug(f"Found {len(results)} mistakes in file")
+
             with open(output_csv_path, mode='a', newline='') as csv_file:
                 writer = csv.DictWriter(csv_file, fieldnames=[
                     "id", "White Player", "Black Player", "Current Turn",
@@ -213,9 +239,11 @@ def process_pgn_folder(input_folder: str, sf: engine, player_name: str = None, m
                     print(f"Result line {result}")
                 
             shutil.move(pgn_file, os.path.join(input_folder, "done"))
+            if debug:
+                logger.debug(f"Moved processed file to 'done' directory")
 
         except Exception as e: 
-            print(f"An error occurred: {e}")
+            logger.error(f"An error occurred: {e}")
             traceback.print_exc()
             continue
 
@@ -257,8 +285,8 @@ def split_pgn_file(pgn_file_path, output_directory):
 if __name__ == '__main__':
     logger.info("Starting main execution of findMistake.py")
 
-    input_folder = r"\out\pgn\1008night"
-    player_name = None
+    input_folder = r"\out\pgn\20250112alice"
+    player_name = "Alice"
     mistakeValue = 200
 
     # input_file = r"KevinZhangXY_vs_citso_2024.08.30.pgn"
@@ -278,11 +306,11 @@ if __name__ == '__main__':
         shutil.move(pgn_file, split_directory)
 
     # step 2 make comment with WDL and eva
-    op = {'WeightsFile': r'K:\leela\lc0-v0.30.0-windows-gpu-nvidia-cudnn\791556.pb.gz', 'UCI_ShowWDL': 'true'}
 
-    leela = configureEngine(r'K:\leela\lc0-v0.30.0-windows-gpu-nvidia-cudnn\lc0.exe', op)
-    sf = configureEngine(r'K:\github\stockfish-windows-x86-64\stockfish\stockfish-windows-x86-64.exe', {'Threads': '10', 'Hash': '4096'})
-
+    logger.info("Configuring chess engines")
+    leela = configureEngine(LEELA_PATH, LEELA_OPTIONS)
+    sf = configureEngine(STOCKFISH_PATH, STOCKFISH_OPTIONS)
+    
     #this is test one single file 
     # makeComments(functions.relativePathToAbsPath(r'\resources\pgn\lichess_study_2024-2nd-half_chapter-12-johansen-darryl-vsshen-zhiyuan_by_wuchen1_2024.07.15.pgn'), functions.relativePathToAbsPath(r'\out\pgn\johansen-darryl-vsshen-zhiyuan.pgn'), analysisCPnWDL, 5000, leela, True)
     # print(findMistakes(functions.relativePathToAbsPath(r'\out\pgn\johansen-darryl-vsshen-zhiyuan.pgn'), sf))

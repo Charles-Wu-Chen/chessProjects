@@ -1,3 +1,5 @@
+1
+
 conda create -n chessproject
 conda activate chessproject
 
@@ -5,6 +7,11 @@ conda activate chessproject
 
 pip install -r requirements.txt
 
+2
+
+copy config.example.py to config.py and update with your local paths
+
+3
 
 # This is to support SVG image output. It is a requirement for cairosvg
 
@@ -13,16 +20,19 @@ Install GTK+ and Cairo:
 
 You can use the MSYS2 environment to install Cairo and its dependencies.
 After installing MSYS2, open the MSYS2 shell and run the following commands:
-bash
-Copy code
+
+```
 pacman -S mingw-w64-x86_64-gtk3 mingw-w64-x86_64-cairo
+```
+
 Ensure that the MSYS2 mingw64 bin directory is added to your system's PATH.
 Install CairoSVG:
 
 You can install CairoSVG through pip:
-bash
-Copy code
+
+```
 pip install cairosvg
+```
 
 # Running tests
 

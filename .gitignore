@@ -2,5 +2,4 @@ resources/
 out/
 __pycache__/
 gameAnalysis/__pycache__/
-*.db
-*.png
+config.py

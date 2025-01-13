@@ -10,6 +10,7 @@ import functions
 from functions import configureEngine, analysisCPnWDL
 import fenToImage
 import findMistake
+from config import LEELA_PATH, STOCKFISH_PATH, LEELA_OPTIONS, STOCKFISH_OPTIONS
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -44,9 +45,9 @@ def prepare_directories(input_directory, comment_directory, split_directory):
 def main():
     logger.info("Starting main execution of test_FindMistake.py")
     
-    input_folder = r"\out\pgn\test_findMistake"
-    player_name = "alice"
-    mistake_value = 100
+    input_folder = r"\test\pgn\test_findMistake"
+    player_name = "wu"
+    mistake_value = 200
 
     logger.info(f"Input folder: {input_folder}, Player name: {player_name}, Mistake value: {mistake_value}")
 
@@ -71,9 +72,8 @@ def main():
         shutil.move(pgn_file, split_directory)
 
     logger.info("Configuring chess engines")
-    op = {'WeightsFile': r'K:\leela\lc0-v0.30.0-windows-gpu-nvidia-cudnn\791556.pb.gz', 'UCI_ShowWDL': 'true'}
-    leela = configureEngine(r'K:\leela\lc0-v0.30.0-windows-gpu-nvidia-cudnn\lc0.exe', op)
-    sf = configureEngine(r'K:\github\stockfish-windows-x86-64\stockfish\stockfish-windows-x86-64.exe', {'Threads': '10', 'Hash': '4096'})
+    leela = configureEngine(LEELA_PATH, LEELA_OPTIONS)
+    sf = configureEngine(STOCKFISH_PATH, STOCKFISH_OPTIONS)
 
     pgn_files = glob(os.path.join(output_directory, "*.pgn"))
     logger.info(f"Found {len(pgn_files)} PGN files after splitting")
@@ -90,7 +90,7 @@ def main():
                 print(exc)
         
         logger.info("Starting to process PGN folder")
-        detail_file_name = findMistake.process_pgn_folder(comment_directory, sf, player_name, mistake_value)
+        detail_file_name = findMistake.process_pgn_folder(comment_directory, sf, player_name, mistake_value, debug=True)
         logger.info(f"Finished processing PGN folder. Output file: {detail_file_name}")
     finally:
         logger.info("Quitting chess engines")

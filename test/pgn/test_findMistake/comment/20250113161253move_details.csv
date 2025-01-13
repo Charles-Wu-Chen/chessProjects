@@ -1,0 +1,2 @@
+ID,White Player,Black Player,Current Turn,Previous Move,Game Move,Best Move,PGN File,FEN,Sharpness,WDL
+1,"Wu, Alice","Arthur, James",White,Rf1+,Rxf1,Rxf1,1_Wu__Alice_vs_Arthur__James_13161252752692.pgn,5r2/pp4qk/2p1R2p/2Pp2p1/8/6Q1/P5PP/4RrK1 w - - 2 30,2.816,"[221, 262, 517]"

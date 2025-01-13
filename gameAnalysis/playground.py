@@ -1,12 +1,11 @@
-
-import chardet
-import functions
 import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import functions
+import chardet
 import chess
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-with open(functions.relativePathToAbsPath(r'\out\pgn\0907oscar20\俞亦奇-丁逸轩 0-1.pgn'), 'rb') as f:
+with open(functions.relativePathToAbsPath(r'\test\pgn\20250112\lichess_study_2024-2nd-half_round-7-akokbenjamin-wu-chen_by_wuchen1_2024.12.30.pgn'), 'rb') as f:
     result = chardet.detect(f.read())
     print(result)
 
